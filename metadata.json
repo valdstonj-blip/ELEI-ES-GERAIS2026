@@ -1,0 +1,6 @@
+{
+  "name": "EMG-PM/3 - Planejamento Eleições 2026",
+  "description": "Sistema de gestão e planejamento de locais de votação da Seção de Planejamento e Operações (EMG-PM/3) para a Operação Eleições 2026.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
