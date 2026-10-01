@@ -12,13 +12,25 @@ import {
   Users,
   Calendar,
   ChevronDown,
+  RefreshCw,
+  Link2,
+  User,
+  Shield,
+  Eye,
+  FileText,
+  Clock,
 } from 'lucide-react';
 import { FaltaEfetivo } from '../types';
 import { exportFaltasPdf, matchesCarimboDate } from '../services/pdfService';
+import { normalizeCpaName } from '../services/sheetService';
 
 interface FaltasTabProps {
   faltas: FaltaEfetivo[];
   onAddFalta?: (nova: FaltaEfetivo) => void;
+  lastSyncTime?: string | null;
+  onSync?: () => void;
+  isSyncing?: boolean;
+  onOpenSettings?: () => void;
 }
 
 // Função utilitária precisa para contar policiais em texto com delimitadores (ex: ponto e vírgula)
@@ -45,7 +57,13 @@ export function countPoliciaisInText(text: string | undefined): number {
   return items.length > 0 ? items.length : 1;
 }
 
-export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
+export const FaltasTab: React.FC<FaltasTabProps> = ({
+  faltas,
+  lastSyncTime,
+  onSync,
+  isSyncing,
+  onOpenSettings,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCpa, setSelectedCpa] = useState('TODOS');
   const [selectedOpm, setSelectedOpm] = useState('TODAS');
@@ -53,10 +71,13 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
   const [pdfDropdownOpen, setPdfDropdownOpen] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
+  const [modalFalta, setModalFalta] = useState<FaltaEfetivo | null>(null);
 
   const availableCpas = useMemo(() => {
     const set = new Set(
-      faltas.map((f) => f.comandoIntermediario || f.cpa).filter(Boolean)
+      faltas
+        .map((f) => normalizeCpaName(f.comandoIntermediario || f.cpa || ''))
+        .filter(Boolean)
     );
     return ['TODOS', ...Array.from(set).sort()];
   }, [faltas]);
@@ -68,18 +89,19 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
     return ['TODAS', ...Array.from(set).sort()];
   }, [faltas]);
 
-  // Filtragem precisa em todas as colunas com foco estrito no CARIMBO DE DATA E HORA
+  // Filtragem precisa em todas as colunas com foco estrito no CARIMBO DE DATA E HORA e no SERVIÇO DO DIA
   const filteredFaltas = useMemo(() => {
     return faltas.filter((f) => {
-      const cpaVal = (f.comandoIntermediario || f.cpa || '').trim();
+      const cpaVal = normalizeCpaName(f.comandoIntermediario || f.cpa || '');
       if (selectedCpa !== 'TODOS' && cpaVal !== selectedCpa) return false;
 
       const opmVal = (f.opm || f.uopDestino || f.opmOrigem || '').trim();
       if (selectedOpm !== 'TODAS' && opmVal !== selectedOpm) return false;
 
-      // Filtro de Dia focado estritamente no Carimbo de Data e Hora
+      // Filtro de Dia focado no Carimbo de Data e Hora e no Serviço do Dia
       if (selectedDay !== 'TODOS') {
-        if (!matchesCarimboDate(f.carimbo, selectedDay, f.servicoDia || f.turno)) {
+        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''}`;
+        if (!matchesCarimboDate(f.carimbo, selectedDay, fallbackText)) {
           return false;
         }
       }
@@ -110,7 +132,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
       }
       return true;
     });
-  }, [faltas, selectedCpa, selectedOpm, searchTerm]);
+  }, [faltas, selectedCpa, selectedOpm, selectedDay, searchTerm]);
 
   const totalPages = Math.ceil(filteredFaltas.length / itemsPerPage) || 1;
   const paginatedFaltas = useMemo(() => {
@@ -121,7 +143,6 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
   // Totalização exata da quantidade de policiais faltosos
   const stats = useMemo(() => {
     const totalEnvios = faltas.length;
-
     let totalPoliciaisFaltosos = 0;
 
     faltas.forEach((f) => {
@@ -135,11 +156,8 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
     return { totalEnvios, totalPoliciaisFaltosos, opmsCount };
   }, [faltas]);
 
-  // Renderizador ajustado para os textos dos policiais (separados por ponto e vírgula)
-  const renderPolicialItems = (
-    rawText: string | undefined,
-    type: 'falta' = 'falta'
-  ) => {
+  // Renderizador ajustado para os textos dos policiais faltosos
+  const renderPolicialChips = (rawText: string | undefined) => {
     const text = (rawText || '').trim();
     const lower = text.toLowerCase();
 
@@ -157,7 +175,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
           <CheckCircle2 className="w-3 h-3 text-slate-400" />
-          <span>sem alteração</span>
+          <span>Sem alteração</span>
         </span>
       );
     }
@@ -172,23 +190,15 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
     }
 
     return (
-      <div className="space-y-1 py-0.5">
+      <div className="flex flex-wrap gap-1.5 py-0.5">
         {items.map((item, idx) => (
-          <div
+          <span
             key={idx}
-            className={`flex items-start gap-1.5 p-1.5 rounded border text-[11px] font-semibold leading-tight ${
-              type === 'falta'
-                ? 'bg-rose-50/80 border-rose-200 text-rose-900'
-                : 'bg-blue-50/80 border-blue-200 text-blue-900'
-            }`}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-rose-50 border border-rose-200 text-rose-900 text-[11px] font-semibold leading-tight shadow-2xs"
           >
-            <span
-              className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${
-                type === 'falta' ? 'bg-rose-500' : 'bg-blue-500'
-              }`}
-            />
-            <span className="break-words">{item}</span>
-          </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+            <span>{item}</span>
+          </span>
         ))}
       </div>
     );
@@ -196,57 +206,102 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
 
   return (
     <div id="faltas-dashboard" className="space-y-3.5">
-      {/* 0. Cards de Resumo com Totalização Real de Policiais Faltosos */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col">
+      {/* 0. CARDS DE RESUMO OPERACIONAL + STATUS DE CONEXÃO DA PLANILHA */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
               Total de Envios
             </span>
             <FileSpreadsheet className="w-4 h-4 text-slate-400" />
           </div>
-          <span className="text-2xl font-black text-slate-900 mt-1">
-            {stats.totalEnvios}
-          </span>
-          <span className="text-[10px] text-slate-400 mt-0.5">
-            Respostas da planilha
-          </span>
+          <div className="mt-1">
+            <span className="text-2xl font-black text-slate-900">
+              {stats.totalEnvios}
+            </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              Respostas na planilha
+            </span>
+          </div>
         </div>
 
-        <div className="bg-white border border-rose-200 rounded-xl p-3.5 shadow-2xs flex flex-col bg-rose-50/20">
+        <div className="bg-white border border-rose-200 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between bg-rose-50/20">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wide">
               Total Policiais Faltosos
             </span>
             <AlertCircle className="w-4 h-4 text-rose-600" />
           </div>
-          <span className="text-2xl font-black text-rose-700 mt-1">
-            {stats.totalPoliciaisFaltosos}
-          </span>
-          <span className="text-[10px] text-rose-600 font-semibold mt-0.5">
-            {stats.totalPoliciaisFaltosos === 1 ? '1 policial faltoso' : `${stats.totalPoliciaisFaltosos} policiais faltosos`}
-          </span>
+          <div className="mt-1">
+            <span className="text-2xl font-black text-rose-700">
+              {stats.totalPoliciaisFaltosos}
+            </span>
+            <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
+              {stats.totalPoliciaisFaltosos === 1
+                ? '1 policial faltoso'
+                : `${stats.totalPoliciaisFaltosos} policiais faltosos`}
+            </span>
+          </div>
         </div>
 
-        <div className="bg-white border border-indigo-200 rounded-xl p-3.5 shadow-2xs flex flex-col bg-indigo-50/20">
+        <div className="bg-white border border-indigo-200 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between bg-indigo-50/20">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide">
-              OPMs Atendidas
+              OPMs com Faltas
             </span>
             <Building2 className="w-4 h-4 text-indigo-600" />
           </div>
-          <span className="text-2xl font-black text-indigo-800 mt-1">
-            {stats.opmsCount}
-          </span>
-          <span className="text-[10px] text-indigo-600 font-semibold mt-0.5">
-            Batalhões e unidades registradas
-          </span>
+          <div className="mt-1">
+            <span className="text-2xl font-black text-indigo-800">
+              {stats.opmsCount}
+            </span>
+            <span className="text-[10px] text-indigo-600 font-semibold block mt-0.5">
+              Batalhões e unidades registradas
+            </span>
+          </div>
+        </div>
+
+        {/* Card de Conexão com Google Sheets */}
+        <div className="bg-white border border-blue-200 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between bg-blue-50/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Planilha Google</span>
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 font-mono">
+              {lastSyncTime || 'Conectada'}
+            </span>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5">
+            {onSync && (
+              <button
+                onClick={onSync}
+                disabled={isSyncing}
+                title="Sincronizar dados com a Planilha de Faltas agora"
+                className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
+              </button>
+            )}
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                title="Conectar ou alterar link da planilha"
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-200 flex items-center gap-1"
+              >
+                <Link2 className="w-3.5 h-3.5 text-slate-500" />
+                <span>Link</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* 1. Barra de Ferramentas Limpa (Sem botão Novo Registro) */}
+      {/* 1. BARRA DE FERRAMENTAS: BUSCA, FILTROS DE DIA (03OUT / 04OUT), CPA, OPM E PDF */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
+          {/* Busca Rápida */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -256,7 +311,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Buscar por policial, RG, comando, OPM, serviço ou falta..."
+              placeholder="Buscar por policial faltoso, RG, informante, comando, OPM, serviço ou carimbo..."
               className="w-full pl-9 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:bg-white font-medium"
             />
             {searchTerm && (
@@ -269,8 +324,8 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
             )}
           </div>
 
-          {/* Filtro de Dias: 03OUT26 e 04OUT26 pelo Carimbo de Data e Hora */}
-          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200">
+          {/* Filtro de Dias: 03OUT26 e 04OUT26 */}
+          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
             <button
               onClick={() => {
@@ -296,7 +351,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              03OUT26
+              03OUT26 (Sábado)
             </button>
             <button
               onClick={() => {
@@ -309,11 +364,12 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              04OUT26
+              04OUT26 (Domingo)
             </button>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Seletores CPA e OPM */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
               <span className="text-[11px] font-bold text-slate-500">Comando:</span>
               <select
@@ -350,25 +406,36 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
               </select>
             </div>
 
-            {/* Menu Dropdown de Exportação em PDF com Seleção de Data */}
+            {/* Menu Dropdown de Exportação em PDF com Filtros de CPA e OPM */}
             <div className="relative inline-block text-left">
               <div className="inline-flex rounded-lg shadow-2xs">
                 <button
-                  onClick={() => exportFaltasPdf(faltas, selectedDay)}
-                  title={`Baixar PDF de Faltas (${selectedDay === 'TODOS' ? 'Geral - Todos os Dias' : selectedDay})`}
+                  onClick={() =>
+                    exportFaltasPdf(faltas, {
+                      dia: selectedDay,
+                      cpa: selectedCpa,
+                      opm: selectedOpm,
+                      search: searchTerm,
+                    })
+                  }
+                  title={`Baixar PDF de Faltas filtrado por Comando (${selectedCpa}), OPM (${selectedOpm}) e Período (${selectedDay})`}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-l-lg text-xs font-bold transition-colors cursor-pointer"
                 >
                   <FileDown className="w-4 h-4" />
                   <span>
-                    {selectedDay === 'TODOS'
-                      ? 'Exportar PDF Geral'
-                      : `Exportar PDF (${selectedDay})`}
+                    {selectedOpm !== 'TODAS'
+                      ? `Exportar PDF (${selectedOpm})`
+                      : selectedCpa !== 'TODOS'
+                      ? `Exportar PDF (${selectedCpa})`
+                      : selectedDay !== 'TODOS'
+                      ? `Exportar PDF (${selectedDay})`
+                      : 'Exportar PDF Geral'}
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPdfDropdownOpen((prev) => !prev)}
-                  title="Mais opções de download por data"
+                  title="Mais opções de download por período e filtros"
                   className="px-2 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-r-lg border-l border-blue-500 cursor-pointer"
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
@@ -381,48 +448,86 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
                     className="fixed inset-0 z-20"
                     onClick={() => setPdfDropdownOpen(false)}
                   />
-                  <div className="origin-top-right absolute right-0 mt-1 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black/5 divide-y divide-slate-100 z-30">
-                    <div className="p-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Escolha o Relatório em PDF:
+                  <div className="origin-top-right absolute right-0 mt-1 w-64 rounded-lg shadow-lg bg-white ring-1 ring-black/5 divide-y divide-slate-100 z-30">
+                    <div className="p-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 rounded-t-lg">
+                      {selectedCpa !== 'TODOS' || selectedOpm !== 'TODAS'
+                        ? `Filtrado: ${selectedOpm !== 'TODAS' ? selectedOpm : selectedCpa}`
+                        : 'Relatório em PDF:'}
                     </div>
                     <div className="py-1">
                       <button
                         onClick={() => {
-                          exportFaltasPdf(faltas, '03OUT');
+                          exportFaltasPdf(faltas, {
+                            dia: '03OUT',
+                            cpa: selectedCpa,
+                            opm: selectedOpm,
+                            search: searchTerm,
+                          });
                           setPdfDropdownOpen(false);
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span>PDF - Dia 03OUT26</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono">
+                        <span className="truncate">PDF 03OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
                           03/10
                         </span>
                       </button>
                       <button
                         onClick={() => {
-                          exportFaltasPdf(faltas, '04OUT');
+                          exportFaltasPdf(faltas, {
+                            dia: '04OUT',
+                            cpa: selectedCpa,
+                            opm: selectedOpm,
+                            search: searchTerm,
+                          });
                           setPdfDropdownOpen(false);
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span>PDF - Dia 04OUT26</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono">
+                        <span className="truncate">PDF 04OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
                           04/10
                         </span>
                       </button>
                       <button
                         onClick={() => {
-                          exportFaltasPdf(faltas, 'TODOS');
+                          exportFaltasPdf(faltas, {
+                            dia: 'TODOS',
+                            cpa: selectedCpa,
+                            opm: selectedOpm,
+                            search: searchTerm,
+                          });
                           setPdfDropdownOpen(false);
                         }}
-                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 flex items-center justify-between font-medium cursor-pointer"
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span>PDF - Completo Geral</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
-                          Todos
+                        <span className="truncate">Todos os Dias {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono shrink-0 ml-1">
+                          Filtrado
                         </span>
                       </button>
                     </div>
+
+                    {(selectedCpa !== 'TODOS' || selectedOpm !== 'TODAS') && (
+                      <div className="py-1 bg-slate-50/50">
+                        <button
+                          onClick={() => {
+                            exportFaltasPdf(faltas, {
+                              dia: 'TODOS',
+                              cpa: 'TODOS',
+                              opm: 'TODAS',
+                            });
+                            setPdfDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 flex items-center justify-between font-semibold cursor-pointer"
+                        >
+                          <span>PDF Geral (Todo o Estado)</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
+                            Total
+                          </span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -431,45 +536,42 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
         </div>
       </div>
 
-      {/* 2. Tabela de Faltas com Cabeçalho Exato e Barras de Rolagem Horizontal e Vertical */}
+      {/* 2. TABELA DE FALTAS COM LAYOUT LIMPO E ORGANIZADO */}
       <div className="bg-white border border-slate-200/90 rounded-xl shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto max-h-[520px]">
-          <table className="w-full text-left text-xs text-slate-700 border-collapse min-w-[1260px]">
+        <div className="overflow-x-auto overflow-y-auto max-h-[560px]">
+          <table className="w-full text-left text-xs text-slate-700 border-collapse min-w-[1200px]">
             <thead className="sticky top-0 z-10 bg-slate-900 text-white uppercase text-[10px] font-bold tracking-wider shadow-xs">
               <tr>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[140px] bg-slate-900">
+                <th className="py-2.5 px-3 whitespace-nowrap min-w-[130px] bg-slate-900">
                   CARIMBO DATA HORA
                 </th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[210px] bg-slate-900">
+                <th className="py-2.5 px-3 whitespace-nowrap min-w-[180px] bg-slate-900">
                   SERVIÇO DO DIA
                 </th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[80px] text-center bg-slate-900">
-                  POSTO
+                <th className="py-2.5 px-3 whitespace-nowrap min-w-[170px] bg-slate-900">
+                  INFORMANTE (PM)
                 </th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[85px] text-center bg-slate-900">
-                  RG
+                <th className="py-2.5 px-3 whitespace-nowrap min-w-[110px] text-center bg-slate-900">
+                  COMANDO
                 </th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[120px] bg-slate-900">
-                  NOME DE GUERRA
-                </th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[130px] text-center bg-slate-900">
-                  COMANDO INTERMEDIÁRIO
-                </th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[100px] text-center bg-slate-900">
+                <th className="py-2.5 px-3 whitespace-nowrap min-w-[95px] text-center bg-slate-900">
                   OPM
                 </th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[120px] text-center bg-slate-900">
-                  TOTAL FALTAS (LINHA)
+                <th className="py-2.5 px-3 whitespace-nowrap min-w-[110px] text-center bg-slate-900">
+                  TOTAL FALTAS
                 </th>
-                <th className="py-2.5 px-3 min-w-[400px] bg-slate-900">
-                  FALTAS NO POE - IDENTIFICAÇÃO DO POLICIAL FALTOSO.
+                <th className="py-2.5 px-3 min-w-[420px] bg-slate-900">
+                  POLICIAIS FALTOSOS NO POE (IDENTIFICAÇÃO)
+                </th>
+                <th className="py-2.5 px-3 whitespace-nowrap min-w-[85px] text-center bg-slate-900">
+                  FICHA
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paginatedFaltas.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     Nenhum registro de envio da planilha encontrado.
                   </td>
                 </tr>
@@ -477,14 +579,18 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
                 paginatedFaltas.map((f, idx) => {
                   const carimboText = f.carimbo || f.data;
                   const servicoText = f.servicoDia || f.turno;
-                  const postoText = f.posto || f.postoGrad;
-                  const rgText = f.rg;
-                  const nomeText = f.nomeGuerra;
-                  const cpaText = f.comandoIntermediario || f.cpa || '2 CPA';
+                  const cpaText = normalizeCpaName(f.comandoIntermediario || f.cpa || '2º CPA');
                   const opmText = f.opm || f.uopDestino || f.opmOrigem || '9º BPM';
                   const faltasTexto = f.faltasPoe || f.motivo;
-
                   const qtdFaltasLinha = countPoliciaisInText(faltasTexto);
+
+                  const informanteDesc = [
+                    f.posto || f.postoGrad,
+                    f.nomeGuerra,
+                    f.rg ? `(RG ${f.rg})` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ');
 
                   return (
                     <tr
@@ -500,44 +606,47 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
 
                       {/* 2. SERVIÇO DO DIA */}
                       <td className="py-2.5 px-3 font-medium text-slate-900 align-top">
-                        <div className="font-semibold leading-snug">{servicoText}</div>
-                      </td>
-
-                      {/* 3. POSTO */}
-                      <td className="py-2.5 px-3 font-bold text-center text-slate-900 whitespace-nowrap align-top">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px]">
-                          {postoText}
+                        <span className="font-semibold leading-snug block">
+                          {servicoText}
                         </span>
                       </td>
 
-                      {/* 4. RG */}
-                      <td className="py-2.5 px-3 font-mono text-center font-bold text-slate-700 whitespace-nowrap align-top">
-                        {rgText || '-'}
+                      {/* 3. INFORMANTE */}
+                      <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                        {informanteDesc ? (
+                          <div className="text-slate-800">
+                            <span className="font-bold block text-[11px]">
+                              {f.posto || f.postoGrad} {f.nomeGuerra}
+                            </span>
+                            {f.rg && (
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                RG: {f.rg}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">-</span>
+                        )}
                       </td>
 
-                      {/* 5. NOME DE GUERRA */}
-                      <td className="py-2.5 px-3 font-extrabold text-slate-900 whitespace-nowrap align-top">
-                        {nomeText || '-'}
-                      </td>
-
-                      {/* 6. COMANDO INTERMEDIÁRIO */}
+                      {/* 4. COMANDO INTERMEDIÁRIO */}
                       <td className="py-2.5 px-3 font-bold text-center whitespace-nowrap align-top">
                         <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-bold">
                           {cpaText}
                         </span>
                       </td>
 
-                      {/* 7. OPM */}
+                      {/* 5. OPM */}
                       <td className="py-2.5 px-3 font-bold text-center whitespace-nowrap align-top">
                         <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800 text-[11px] font-bold">
                           {opmText}
                         </span>
                       </td>
 
-                      {/* 8. TOTAL FALTAS (LINHA) */}
+                      {/* 6. TOTAL FALTAS (LINHA) */}
                       <td className="py-2.5 px-3 text-center whitespace-nowrap align-top">
                         {qtdFaltasLinha > 0 ? (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-black shadow-2xs">
+                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-black shadow-2xs">
                             <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
                             <span>{qtdFaltasLinha} Falta(s)</span>
                           </div>
@@ -548,9 +657,21 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
                         )}
                       </td>
 
-                      {/* 9. FALTAS NO POE - IDENTIFICAÇÃO DO POLICIAL FALTOSO. */}
+                      {/* 7. FALTAS NO POE - IDENTIFICAÇÃO DO POLICIAL FALTOSO */}
                       <td className="py-2.5 px-3 align-top">
-                        {renderPolicialItems(faltasTexto, 'falta')}
+                        {renderPolicialChips(faltasTexto)}
+                      </td>
+
+                      {/* 8. FICHA / DETALHES */}
+                      <td className="py-2.5 px-3 text-center align-top whitespace-nowrap">
+                        <button
+                          onClick={() => setModalFalta(f)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-colors cursor-pointer"
+                          title="Ver ficha completa com todos os campos deste envio"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Ficha</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -561,47 +682,137 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({ faltas }) => {
         </div>
 
         {/* Paginação */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-2.5 bg-slate-50/80 border-t border-slate-200 text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <span>Exibindo</span>
-            <select
-              value={itemsPerPage}
-              onChange={(e) => {
-                setItemsPerPage(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-700 cursor-pointer"
-            >
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
+        {totalPages > 1 && (
+          <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
             <span>
-              de <strong>{filteredFaltas.length}</strong> linha(s) da planilha
+              Mostrando {paginatedFaltas.length} de {filteredFaltas.length} registros
             </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-slate-200 disabled:opacity-40 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-2 font-bold text-slate-900">
+                {currentPage} de {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-slate-200 disabled:opacity-40 cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+        )}
+      </div>
 
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="px-2.5 py-0.5 font-bold text-slate-800">
-              Página {currentPage} de {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+      {/* 3. MODAL COM A FICHA COMPLETA DO ENVIO DE FALTAS */}
+      {modalFalta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Cabeçalho do Modal */}
+            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm leading-tight text-white uppercase">
+                    Ficha Completa de Envio de Faltas no POE
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Carimbo: {modalFalta.carimbo}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalFalta(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Conteúdo do Modal */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+              {/* Informante & Unidade */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Policial Militar Informante</span>
+                  </span>
+                  <div className="font-bold text-slate-900 text-sm">
+                    {modalFalta.posto || modalFalta.postoGrad || 'Policial Militar'} {modalFalta.nomeGuerra || '-'}
+                  </div>
+                  {modalFalta.rg && (
+                    <div className="text-[11px] text-slate-600 font-mono mt-0.5">
+                      RG PM: {modalFalta.rg}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1 flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Unidade & Serviço</span>
+                  </span>
+                  <div className="font-bold text-slate-900 text-sm">
+                    {normalizeCpaName(modalFalta.comandoIntermediario || modalFalta.cpa || '')} • {modalFalta.opm || modalFalta.uopDestino || '-'}
+                  </div>
+                  <div className="text-[11px] text-slate-700 mt-0.5 font-medium">
+                    {modalFalta.servicoDia || modalFalta.turno || 'Serviço POE Eleições'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Relação de Faltas */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Relação de Policiais Faltosos (POE)</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                    {countPoliciaisInText(modalFalta.faltasPoe || modalFalta.motivo)} falta(s)
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  {renderPolicialChips(modalFalta.faltasPoe || modalFalta.motivo)}
+                </div>
+              </div>
+
+              {/* Dispensas (se houver) */}
+              {modalFalta.dispensasPoe && modalFalta.dispensasPoe !== 'sem alteração' && (
+                <div className="space-y-2">
+                  <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Dispensas Registradas no POE</span>
+                  </span>
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 leading-relaxed whitespace-pre-wrap">
+                    {modalFalta.dispensasPoe}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setModalFalta(null)}
+                className="px-4 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+              >
+                Fechar Ficha
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

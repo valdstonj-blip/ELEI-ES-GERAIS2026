@@ -15,9 +15,19 @@ import {
   MapPin,
   ShieldAlert,
   ChevronDown,
+  RefreshCw,
+  Link2,
+  Building2,
+  AlertCircle,
+  FileSpreadsheet,
+  User,
+  Mail,
+  Shield,
+  FileCheck,
 } from 'lucide-react';
 import { Ocorrencia } from '../types';
 import { exportOcorrenciasPdf, matchesCarimboDate } from '../services/pdfService';
+import { normalizeCpaName } from '../services/sheetService';
 
 interface OcorrenciasTabProps {
   ocorrencias: Ocorrencia[];
@@ -25,6 +35,7 @@ interface OcorrenciasTabProps {
   lastSyncTime?: string | null;
   onSync?: () => void;
   isSyncing?: boolean;
+  onOpenSettings?: () => void;
 }
 
 // As 5 perguntas com respostas pré-definidas em múltipla escolha
@@ -34,36 +45,56 @@ const CRIMES_FORMULARIO = [
     title: 'Crimes comuns contra candidatos',
     short: 'Contra Candidatos',
     key: 'crimesCandidatos' as const,
-    color: '#d97706',
+    color: 'amber',
+    borderColor: 'border-amber-300',
+    bgColor: 'bg-amber-50',
+    textColor: 'text-amber-900',
+    badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
   },
   {
     id: 'Crimes comuns nos locais de votação/apuração',
     title: 'Crimes comuns nos locais de votação/apuração',
-    short: 'Nos Locais de Votação/Apuração',
+    short: 'Locais de Votação',
     key: 'crimesLocaisVotacao' as const,
-    color: '#2563eb',
+    color: 'blue',
+    borderColor: 'border-blue-300',
+    bgColor: 'bg-blue-50',
+    textColor: 'text-blue-900',
+    badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
   },
   {
     id: 'Crimes Eleitorais',
     title: 'Crimes Eleitorais',
     short: 'Crimes Eleitorais',
     key: 'crimesEleitorais' as const,
-    color: '#7c3aed',
+    color: 'purple',
+    borderColor: 'border-purple-300',
+    bgColor: 'bg-purple-50',
+    textColor: 'text-purple-900',
+    badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
   },
   {
     id: 'Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação',
     title:
       'Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação',
-    short: 'Incidentes Seg. Pública / Entorno',
+    short: 'Incidentes Segurança',
     key: 'incidentesSeguranca' as const,
-    color: '#0284c7',
+    color: 'sky',
+    borderColor: 'border-sky-300',
+    bgColor: 'bg-sky-50',
+    textColor: 'text-sky-900',
+    badgeColor: 'bg-sky-100 text-sky-800 border-sky-200',
   },
   {
     id: 'Prisões/apreensões no entorno e/ou locais de votação',
     title: 'Prisões/apreensões no entorno e/ou locais de votação',
-    short: 'Prisões / Apreensões no Entorno',
+    short: 'Prisões / Apreensões',
     key: 'prisoesApreensoes' as const,
-    color: '#dc2626',
+    color: 'rose',
+    borderColor: 'border-rose-300',
+    bgColor: 'bg-rose-50',
+    textColor: 'text-rose-900',
+    badgeColor: 'bg-rose-100 text-rose-800 border-rose-200',
   },
 ];
 
@@ -91,35 +122,35 @@ function getCrimesDaOcorrencia(oc: Ocorrencia): { categoria: string; crime: stri
     result.push({
       categoria: 'Contra Candidatos',
       crime: oc.crimesCandidatos!,
-      color: 'bg-amber-100 text-amber-900 border-amber-300',
+      color: 'bg-amber-50 text-amber-900 border-amber-200',
     });
   }
   if (!isNaoHouve(oc.crimesLocaisVotacao)) {
     result.push({
       categoria: 'Locais de Votação/Apuração',
       crime: oc.crimesLocaisVotacao!,
-      color: 'bg-blue-100 text-blue-900 border-blue-300',
+      color: 'bg-blue-50 text-blue-900 border-blue-200',
     });
   }
   if (!isNaoHouve(oc.crimesEleitorais)) {
     result.push({
       categoria: 'Crimes Eleitorais',
       crime: oc.crimesEleitorais!,
-      color: 'bg-purple-100 text-purple-900 border-purple-300',
+      color: 'bg-purple-50 text-purple-900 border-purple-200',
     });
   }
   if (!isNaoHouve(oc.incidentesSeguranca)) {
     result.push({
       categoria: 'Incidentes Seg. Pública / Entorno',
       crime: oc.incidentesSeguranca!,
-      color: 'bg-sky-100 text-sky-900 border-sky-300',
+      color: 'bg-sky-50 text-sky-900 border-sky-200',
     });
   }
   if (!isNaoHouve(oc.prisoesApreensoes)) {
     result.push({
       categoria: 'Prisões/Apreensões Entorno',
       crime: oc.prisoesApreensoes!,
-      color: 'bg-rose-100 text-rose-900 border-rose-300',
+      color: 'bg-rose-50 text-rose-900 border-rose-200',
     });
   }
 
@@ -128,84 +159,19 @@ function getCrimesDaOcorrencia(oc: Ocorrencia): { categoria: string; crime: stri
     result.push({
       categoria: 'Ocorrência Registrada',
       crime: oc.seHouverOcorrenciaDizerQual,
-      color: 'bg-rose-100 text-rose-900 border-rose-300',
+      color: 'bg-rose-50 text-rose-900 border-rose-200',
     });
   }
 
   return result;
 }
 
-// Indicador circular simples para as 5 perguntas de múltipla escolha
-const CircularCategoryGauge: React.FC<{
-  title: string;
-  categoryName: string;
-  value: number;
-  total: number;
-  color: string;
-  isActive: boolean;
-  onClick: () => void;
-}> = ({ title, categoryName, value, total, color, isActive, onClick }) => {
-  const size = 76;
-  const strokeWidth = 7;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const percentage = total > 0 ? (value / total) * 100 : 0;
-  const offset =
-    circumference - (Math.min(100, Math.max(0, percentage)) / 100) * circumference;
-
-  return (
-    <button
-      onClick={onClick}
-      title={`Filtrar por: ${categoryName}`}
-      className={`rounded-xl p-3 flex flex-col items-center justify-center text-center transition-all cursor-pointer border w-full ${
-        isActive
-          ? 'bg-blue-50/90 border-blue-400 shadow-xs ring-2 ring-blue-500/20'
-          : 'bg-white hover:bg-slate-50 border-slate-200/90 shadow-2xs'
-      }`}
-    >
-      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 h-7 flex items-center justify-center leading-tight">
-        {title}
-      </span>
-      <div className="relative w-16 h-16 flex items-center justify-center">
-        <svg className="w-16 h-16 -rotate-90" viewBox={`0 0 ${size} ${size}`}>
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke="#f1f5f9"
-            strokeWidth={strokeWidth}
-            fill="transparent"
-          />
-          {value > 0 && (
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              stroke={color}
-              strokeWidth={strokeWidth}
-              strokeDasharray={circumference}
-              strokeDashoffset={offset}
-              strokeLinecap="round"
-              fill="transparent"
-              className="transition-all duration-700 ease-out"
-            />
-          )}
-        </svg>
-        <div className="absolute flex flex-col items-center">
-          <span className="text-lg font-black text-slate-900 font-sans leading-none">
-            {value}
-          </span>
-          <span className="text-[9px] font-bold text-slate-400 mt-0.5 font-mono">
-            {percentage.toFixed(0)}%
-          </span>
-        </div>
-      </div>
-    </button>
-  );
-};
-
 export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
   ocorrencias,
+  lastSyncTime,
+  onSync,
+  isSyncing,
+  onOpenSettings,
 }) => {
   // Filtro estrito de dias pelo Carimbo de Data/Hora (03OUT26 ou 04OUT26)
   const [selectedDay, setSelectedDay] = useState<'TODOS' | '03OUT' | '04OUT'>('TODOS');
@@ -226,7 +192,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
 
   const availableCpas = useMemo(() => {
     const set = new Set(
-      ocorrencias.map((o) => o.comandoIntermediario || o.cpa).filter(Boolean)
+      ocorrencias.map((o) => normalizeCpaName(o.comandoIntermediario || o.cpa || '')).filter(Boolean)
     );
     return ['TODOS', ...Array.from(set).sort()];
   }, [ocorrencias]);
@@ -271,13 +237,39 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
     return counts;
   }, [ocorrencias]);
 
+  // Indicadores de Resumo Gerais
+  const stats = useMemo(() => {
+    const total = ocorrencias.length;
+    let comCrime = 0;
+    let semAlteracao = 0;
+    const opms = new Set<string>();
+
+    ocorrencias.forEach((oc) => {
+      const crimes = getCrimesDaOcorrencia(oc);
+      if (crimes.length > 0) {
+        comCrime++;
+      } else {
+        semAlteracao++;
+      }
+      const uop = oc.opm || oc.uop;
+      if (uop) opms.add(uop);
+    });
+
+    return {
+      total,
+      comCrime,
+      semAlteracao,
+      opmsCount: opms.size,
+    };
+  }, [ocorrencias]);
+
   // Filtragem focada na Data do Carimbo de Data/Hora (03OUT ou 04OUT)
   const filteredOcorrencias = useMemo(() => {
     return ocorrencias.filter((oc) => {
-      const cpaVal = oc.comandoIntermediario || oc.cpa || '';
+      const cpaVal = normalizeCpaName(oc.comandoIntermediario || oc.cpa || '');
       if (selectedCpa !== 'TODOS' && cpaVal !== selectedCpa) return false;
 
-      const opmVal = oc.opm || oc.uop || '';
+      const opmVal = (oc.opm || oc.uop || '').trim();
       if (selectedOpm !== 'TODAS' && opmVal !== selectedOpm) return false;
 
       // Filtro de Pergunta de Crime
@@ -313,38 +305,44 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
         if (!hasCrime) return false;
       }
 
-      // Filtro de Dia focado no Carimbo de Data e Hora (03OUT ou 04OUT)
+      // Filtro de Dia focado no Carimbo de Data e Hora e no Serviço do Dia
       if (selectedDay !== 'TODOS') {
-        if (
-          !matchesCarimboDate(
-            oc.carimbo,
-            selectedDay,
-            `${oc.dataHoraFato || ''} ${oc.dinamica || ''}`
-          )
-        ) {
+        const fallbackText = `${oc.servicoDia || ''} ${oc.dataHoraFato || ''} ${oc.dinamica || ''}`;
+        if (!matchesCarimboDate(oc.carimbo, selectedDay, fallbackText)) {
           return false;
         }
       }
 
+      // Busca por texto amplo
       if (searchTerm) {
         const q = searchTerm.toLowerCase();
-        const matches =
-          (oc.carimbo || '').toLowerCase().includes(q) ||
-          (oc.comandoIntermediario || oc.cpa || '').toLowerCase().includes(q) ||
-          (oc.opm || oc.uop || '').toLowerCase().includes(q) ||
-          (oc.seHouverOcorrenciaDizerQual || '').toLowerCase().includes(q) ||
-          (oc.local || '').toLowerCase().includes(q) ||
-          (oc.hora || '').toLowerCase().includes(q) ||
-          (oc.bopm || '').toLowerCase().includes(q) ||
-          (oc.ro || '').toLowerCase().includes(q) ||
-          (oc.dinamica || '').toLowerCase().includes(q) ||
-          (oc.crimesLocaisVotacao || '').toLowerCase().includes(q) ||
-          (oc.crimesCandidatos || '').toLowerCase().includes(q) ||
-          (oc.crimesEleitorais || '').toLowerCase().includes(q) ||
-          (oc.incidentesSeguranca || '').toLowerCase().includes(q) ||
-          (oc.prisoesApreensoes || '').toLowerCase().includes(q);
+        const carimbo = (oc.carimbo || '').toLowerCase();
+        const servico = (oc.servicoDia || '').toLowerCase();
+        const cpa = cpaVal.toLowerCase();
+        const opm = opmVal.toLowerCase();
+        const local = (oc.local || oc.bairro || oc.localidade || '').toLowerCase();
+        const hora = (oc.hora || '').toLowerCase();
+        const bopm = (oc.bopm || '').toLowerCase();
+        const ro = (oc.ro || '').toLowerCase();
+        const dinamica = (oc.dinamica || oc.historico || '').toLowerCase();
+        const informante = `${oc.posto || ''} ${oc.nomeGuerra || ''} ${oc.rg || ''}`.toLowerCase();
+        const crimesStr = (oc.crimesRegistrados || []).join(' ').toLowerCase();
 
-        if (!matches) return false;
+        if (
+          !carimbo.includes(q) &&
+          !servico.includes(q) &&
+          !cpa.includes(q) &&
+          !opm.includes(q) &&
+          !local.includes(q) &&
+          !hora.includes(q) &&
+          !bopm.includes(q) &&
+          !ro.includes(q) &&
+          !dinamica.includes(q) &&
+          !informante.includes(q) &&
+          !crimesStr.includes(q)
+        ) {
+          return false;
+        }
       }
 
       return true;
@@ -366,60 +364,164 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
 
   return (
     <div id="ocorrencias-dashboard" className="space-y-3.5">
-      {/* 0. Seção: Ocorrência relacionada ao Pleito Eleitoral - As 5 Perguntas com Múltipla Escolha */}
+      {/* 0. CARDS DE RESUMO OPERACIONAL + STATUS DE CONEXÃO DIRETA */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+              Total de Envios
+            </span>
+            <FileSpreadsheet className="w-4 h-4 text-slate-400" />
+          </div>
+          <div className="mt-1">
+            <span className="text-2xl font-black text-slate-900">
+              {stats.total}
+            </span>
+            <span className="text-[10px] text-slate-500 block mt-0.5">
+              {stats.total === 1 ? '1 resposta na planilha' : `${stats.total} respostas na planilha`}
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white border border-rose-200 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between bg-rose-50/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wide">
+              Com Ocorrência / Fato
+            </span>
+            <AlertTriangle className="w-4 h-4 text-rose-600" />
+          </div>
+          <div className="mt-1">
+            <span className="text-2xl font-black text-rose-700">
+              {stats.comCrime}
+            </span>
+            <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
+              Incidentes ou crimes reportados
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+              Sem Alteração
+            </span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="mt-1">
+            <span className="text-2xl font-black text-slate-900">
+              {stats.semAlteracao}
+            </span>
+            <span className="text-[10px] text-slate-500 block mt-0.5">
+              Normalidade informada
+            </span>
+          </div>
+        </div>
+
+        {/* Card de Conexão com Google Sheets com Botão de Sincronização e Link */}
+        <div className="bg-white border border-blue-200 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between bg-blue-50/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Planilha Google</span>
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 font-mono">
+              {lastSyncTime || 'Conectada'}
+            </span>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5">
+            {onSync && (
+              <button
+                onClick={onSync}
+                disabled={isSyncing}
+                title="Sincronizar dados com a Planilha de Ocorrências agora"
+                className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
+              </button>
+            )}
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                title="Conectar ou alterar link da planilha"
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-200 flex items-center gap-1"
+              >
+                <Link2 className="w-3.5 h-3.5 text-slate-500" />
+                <span>Link</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 1. SEÇÃO DE CATEGORIAS: AS 5 PERGUNTAS DO FORMULÁRIO COM CARDS ORGANIZADOS */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs space-y-2.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 border-b border-slate-100">
           <div>
             <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-              <span>Ocorrência relacionada ao Pleito Eleitoral</span>
-              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold font-mono">
-                {ocorrencias.length} {ocorrencias.length === 1 ? 'Registro' : 'Registros'}
-              </span>
+              <ShieldAlert className="w-4 h-4 text-blue-600" />
+              <span>Categorias Oficiais do Formulário Eleitoral</span>
             </h3>
             <p className="text-[11px] text-slate-500">
-              Respostas pré-definidas em múltipla escolha por categoria do formulário (clique em qualquer uma para filtrar a tabela)
+              Respostas registradas nas 5 perguntas oficiais de múltipla escolha. Clique em qualquer categoria para filtrar a tabela:
             </p>
           </div>
           {selectedCrimeFilter !== 'TODOS' && (
             <button
-              onClick={() => setSelectedCrimeFilter('TODOS')}
-              className="text-xs text-blue-600 hover:underline font-bold self-start sm:self-auto cursor-pointer"
+              onClick={() => {
+                setSelectedCrimeFilter('TODOS');
+                setCurrentPage(1);
+              }}
+              className="text-xs text-blue-600 hover:underline font-bold self-start sm:self-auto cursor-pointer flex items-center gap-1"
             >
-              Exibir todas
+              <X className="w-3.5 h-3.5" />
+              <span>Limpar Filtro ({selectedCrimeFilter})</span>
             </button>
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
           {CRIMES_FORMULARIO.map((cat) => {
-            const val =
-              countsPerCrimeQuestion[
-                cat.id as keyof typeof countsPerCrimeQuestion
-              ] || 0;
+            const count = countsPerCrimeQuestion[cat.id as keyof typeof countsPerCrimeQuestion] || 0;
             const isSelected = selectedCrimeFilter === cat.id;
 
             return (
-              <CircularCategoryGauge
+              <button
                 key={cat.id}
-                title={cat.short}
-                categoryName={cat.title}
-                value={val}
-                total={ocorrencias.length}
-                color={cat.color}
-                isActive={isSelected}
                 onClick={() => {
                   setSelectedCrimeFilter(isSelected ? 'TODOS' : cat.id);
                   setCurrentPage(1);
                 }}
-              />
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                  isSelected
+                    ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/20 shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200'
+                }`}
+              >
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block truncate">
+                    {cat.short}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-800 line-clamp-1">
+                    {cat.title}
+                  </span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-md text-xs font-black shrink-0 ${
+                    count > 0 ? cat.badgeColor : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* 1. Barra de Ferramentas com Filtro de Data do Carimbo (03OUT e 04OUT) */}
+      {/* 2. BARRA DE FERRAMENTAS: BUSCA, FILTROS DE DATA (03OUT / 04OUT), CPA, OPM E PDF */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2.5">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
           {/* Busca Rápida */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -430,7 +532,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Buscar por data, comando, OPM, local, BOPM, RO ou dinâmica..."
+              placeholder="Buscar por informante, RG, serviço, comando, OPM, local, BOPM, RO ou dinâmica..."
               className="w-full pl-9 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:bg-white font-medium"
             />
             {searchTerm && (
@@ -443,8 +545,8 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
             )}
           </div>
 
-          {/* Filtro de Dias: 03OUT26 e 04OUT26 pelo Carimbo de Data e Hora */}
-          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200">
+          {/* Filtro de Dias: 03OUT26 e 04OUT26 */}
+          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
             <button
               onClick={() => {
@@ -470,7 +572,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              03OUT26
+              03OUT26 (Sábado)
             </button>
             <button
               onClick={() => {
@@ -483,12 +585,12 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              04OUT26
+              04OUT26 (Domingo)
             </button>
           </div>
 
-          {/* Filtros de CPA, OPM, Alternador de Modo e PDF */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Seletores CPA e OPM */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
               <span className="text-[11px] font-bold text-slate-500">Comando:</span>
               <select
@@ -525,7 +627,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               </select>
             </div>
 
-            {/* Alternador entre Modo Consolidado (com Modal) e Todos os Cabeçalhos */}
+            {/* Alternador de Visão de Colunas */}
             <button
               onClick={() =>
                 setViewMode((prev) =>
@@ -534,38 +636,48 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               }
               title={
                 viewMode === 'consolidada'
-                  ? 'Clique para exibir todas as 5 colunas de perguntas individualmente na tabela'
-                  : 'Clique para voltar à visão operacional'
+                  ? 'Ver todas as 5 colunas de perguntas individualmente na tabela'
+                  : 'Voltar à visão consolidada limpa'
               }
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
             >
               <Layers className="w-3.5 h-3.5 text-blue-600" />
               <span>
-                {viewMode === 'consolidada'
-                  ? 'Ver Todos Cabeçalhos'
-                  : 'Ver Visão Principal'}
+                {viewMode === 'consolidada' ? 'Todas Colunas' : 'Visão Principal'}
               </span>
             </button>
 
-            {/* Menu Dropdown de Exportação em PDF com Seleção de Data */}
+            {/* Menu Dropdown de Exportação em PDF com Filtros de CPA e OPM */}
             <div className="relative inline-block text-left">
               <div className="inline-flex rounded-lg shadow-2xs">
                 <button
-                  onClick={() => exportOcorrenciasPdf(ocorrencias, selectedDay)}
-                  title={`Baixar PDF de Ocorrências (${selectedDay === 'TODOS' ? 'Geral - Todos os Dias' : selectedDay})`}
+                  onClick={() =>
+                    exportOcorrenciasPdf(ocorrencias, {
+                      dia: selectedDay,
+                      cpa: selectedCpa,
+                      opm: selectedOpm,
+                      crimeFilter: selectedCrimeFilter,
+                      search: searchTerm,
+                    })
+                  }
+                  title={`Baixar PDF de Ocorrências filtrado por Comando (${selectedCpa}), OPM (${selectedOpm}) e Período (${selectedDay})`}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-l-lg text-xs font-bold transition-colors cursor-pointer"
                 >
                   <FileDown className="w-4 h-4" />
                   <span>
-                    {selectedDay === 'TODOS'
-                      ? 'Exportar PDF Geral'
-                      : `Exportar PDF (${selectedDay})`}
+                    {selectedOpm !== 'TODAS'
+                      ? `Exportar PDF (${selectedOpm})`
+                      : selectedCpa !== 'TODOS'
+                      ? `Exportar PDF (${selectedCpa})`
+                      : selectedDay !== 'TODOS'
+                      ? `Exportar PDF (${selectedDay})`
+                      : 'Exportar PDF Geral'}
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPdfDropdownOpen((prev) => !prev)}
-                  title="Mais opções de download por data"
+                  title="Mais opções de download por período e filtros"
                   className="px-2 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-r-lg border-l border-blue-500 cursor-pointer"
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
@@ -578,48 +690,89 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     className="fixed inset-0 z-20"
                     onClick={() => setPdfDropdownOpen(false)}
                   />
-                  <div className="origin-top-right absolute right-0 mt-1 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black/5 divide-y divide-slate-100 z-30">
-                    <div className="p-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Escolha o Relatório em PDF:
+                  <div className="origin-top-right absolute right-0 mt-1 w-64 rounded-lg shadow-lg bg-white ring-1 ring-black/5 divide-y divide-slate-100 z-30">
+                    <div className="p-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 rounded-t-lg">
+                      {selectedCpa !== 'TODOS' || selectedOpm !== 'TODAS'
+                        ? `Filtrado: ${selectedOpm !== 'TODAS' ? selectedOpm : selectedCpa}`
+                        : 'Relatório em PDF:'}
                     </div>
                     <div className="py-1">
                       <button
                         onClick={() => {
-                          exportOcorrenciasPdf(ocorrencias, '03OUT');
+                          exportOcorrenciasPdf(ocorrencias, {
+                            dia: '03OUT',
+                            cpa: selectedCpa,
+                            opm: selectedOpm,
+                            crimeFilter: selectedCrimeFilter,
+                            search: searchTerm,
+                          });
                           setPdfDropdownOpen(false);
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span>PDF - Dia 03OUT26</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono">
+                        <span className="truncate">PDF 03OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
                           03/10
                         </span>
                       </button>
                       <button
                         onClick={() => {
-                          exportOcorrenciasPdf(ocorrencias, '04OUT');
+                          exportOcorrenciasPdf(ocorrencias, {
+                            dia: '04OUT',
+                            cpa: selectedCpa,
+                            opm: selectedOpm,
+                            crimeFilter: selectedCrimeFilter,
+                            search: searchTerm,
+                          });
                           setPdfDropdownOpen(false);
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span>PDF - Dia 04OUT26</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono">
+                        <span className="truncate">PDF 04OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
                           04/10
                         </span>
                       </button>
                       <button
                         onClick={() => {
-                          exportOcorrenciasPdf(ocorrencias, 'TODOS');
+                          exportOcorrenciasPdf(ocorrencias, {
+                            dia: 'TODOS',
+                            cpa: selectedCpa,
+                            opm: selectedOpm,
+                            crimeFilter: selectedCrimeFilter,
+                            search: searchTerm,
+                          });
                           setPdfDropdownOpen(false);
                         }}
-                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 flex items-center justify-between font-medium cursor-pointer"
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span>PDF - Completo Geral</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
-                          Todos
+                        <span className="truncate">Todos os Dias {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono shrink-0 ml-1">
+                          Filtrado
                         </span>
                       </button>
                     </div>
+
+                    {(selectedCpa !== 'TODOS' || selectedOpm !== 'TODAS') && (
+                      <div className="py-1 bg-slate-50/50">
+                        <button
+                          onClick={() => {
+                            exportOcorrenciasPdf(ocorrencias, {
+                              dia: 'TODOS',
+                              cpa: 'TODOS',
+                              opm: 'TODAS',
+                            });
+                            setPdfDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 flex items-center justify-between font-semibold cursor-pointer"
+                        >
+                          <span>PDF Geral (Todo o Estado)</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
+                            Total
+                          </span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -628,88 +781,95 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
         </div>
       </div>
 
-      {/* 2. Tabela de Ocorrências com Suporte a Múltiplos Crimes por Linha e Botão de Ficha Completa */}
+      {/* 3. TABELA DE OCORRÊNCIAS COM CABEÇALHOS PRECISOS E ESTRUTURADOS */}
       <div className="bg-white border border-slate-200/90 rounded-xl shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto max-h-[520px]">
+        <div className="overflow-x-auto overflow-y-auto max-h-[560px]">
           <table className="w-full text-left text-xs text-slate-700 border-collapse min-w-[1300px]">
             <thead className="sticky top-0 z-10 bg-slate-900 text-white uppercase text-[10px] font-bold tracking-wider shadow-xs">
               {viewMode === 'consolidada' ? (
-                /* Visão Principal: Lista todos os crimes assinalados e botão para Ficha Completa */
                 <tr>
                   <th className="py-2.5 px-3 whitespace-nowrap min-w-[130px] bg-slate-900">
-                    CARIMBO DATA HORA
+                    DATA / HORA
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[120px] text-center bg-slate-900">
-                    COMANDO INTERMEDIÁRIO
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[170px] bg-slate-900">
+                    SERVIÇO DO DIA
+                  </th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[160px] bg-slate-900">
+                    INFORMANTE
+                  </th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[110px] text-center bg-slate-900">
+                    COMANDO
                   </th>
                   <th className="py-2.5 px-3 whitespace-nowrap min-w-[95px] text-center bg-slate-900">
                     OPM
                   </th>
-                  <th className="py-2.5 px-3 min-w-[280px] max-w-[380px] bg-slate-900">
-                    CRIMES REGISTRADOS NO PLEITO (PLANILHA)
+                  <th className="py-2.5 px-3 min-w-[260px] max-w-[340px] bg-slate-900">
+                    CRIME(S) REGISTRADO(S)
                   </th>
-                  <th className="py-2.5 px-3 min-w-[160px] max-w-[220px] bg-slate-900">
+                  <th className="py-2.5 px-3 min-w-[150px] max-w-[200px] bg-slate-900">
                     LOCAL
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[75px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[70px] text-center bg-slate-900">
                     HORA
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[95px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[85px] text-center bg-slate-900">
                     BOPM
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[95px] text-center bg-slate-900">
-                    RO
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
+                    R.O.
                   </th>
-                  <th className="py-2.5 px-3 min-w-[240px] max-w-[380px] bg-slate-900">
-                    DINÂMICA
+                  <th className="py-2.5 px-3 min-w-[220px] max-w-[320px] bg-slate-900">
+                    DINÂMICA / HISTÓRICO
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[110px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
                     FICHA
                   </th>
                 </tr>
               ) : (
-                /* Todos os Cabeçalhos da Planilha com as 5 Perguntas de Múltipla Escolha */
                 <tr>
                   <th className="py-2.5 px-3 whitespace-nowrap min-w-[130px] bg-slate-900">
                     CARIMBO DE DATA/HORA
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[120px] text-center bg-slate-900">
-                    COMANDO INTERMEDIÁRIO
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[170px] bg-slate-900">
+                    SERVIÇO DO DIA
+                  </th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[150px] bg-slate-900">
+                    INFORMANTE
+                  </th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[110px] text-center bg-slate-900">
+                    COMANDO
                   </th>
                   <th className="py-2.5 px-3 whitespace-nowrap min-w-[95px] text-center bg-slate-900">
                     OPM
                   </th>
-                  <th className="py-2.5 px-3 min-w-[200px] bg-slate-900">
-                    CRIMES COMUNS CONTRA CANDIDATOS
-                  </th>
-                  <th className="py-2.5 px-3 min-w-[230px] bg-slate-900">
-                    CRIMES COMUNS NOS LOCAIS DE VOTAÇÃO/APURAÇÃO
-                  </th>
                   <th className="py-2.5 px-3 min-w-[180px] bg-slate-900">
-                    CRIMES ELEITORAIS
+                    1. CONTRA CANDIDATOS
                   </th>
-                  <th className="py-2.5 px-3 min-w-[260px] bg-slate-900">
-                    OCORRÊNCIAS E INCIDENTES DE SEGURANÇA PÚBLICA...
-                  </th>
-                  <th className="py-2.5 px-3 min-w-[210px] bg-slate-900">
-                    PRISÕES/APREENSÕES NO ENTORNO...
+                  <th className="py-2.5 px-3 min-w-[200px] bg-slate-900">
+                    2. LOCAIS DE VOTAÇÃO
                   </th>
                   <th className="py-2.5 px-3 min-w-[160px] bg-slate-900">
+                    3. CRIMES ELEITORAIS
+                  </th>
+                  <th className="py-2.5 px-3 min-w-[220px] bg-slate-900">
+                    4. INCIDENTES SEGURANÇA
+                  </th>
+                  <th className="py-2.5 px-3 min-w-[180px] bg-slate-900">
+                    5. PRISÕES/APREENSÕES
+                  </th>
+                  <th className="py-2.5 px-3 min-w-[140px] bg-slate-900">
                     LOCAL
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[75px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[70px] text-center bg-slate-900">
                     HORA
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[95px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[85px] text-center bg-slate-900">
                     BOPM
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[95px] text-center bg-slate-900">
-                    RO
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
+                    R.O.
                   </th>
-                  <th className="py-2.5 px-3 min-w-[240px] bg-slate-900">
-                    DINÂMICA
-                  </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[110px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
                     FICHA
                   </th>
                 </tr>
@@ -719,7 +879,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               {paginatedOcorrencias.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={viewMode === 'consolidada' ? 10 : 14}
+                    colSpan={viewMode === 'consolidada' ? 12 : 15}
                     className="py-12 text-center text-slate-400"
                   >
                     Nenhuma ocorrência encontrada para os filtros selecionados.
@@ -728,7 +888,8 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               ) : (
                 paginatedOcorrencias.map((oc, idx) => {
                   const carimboText = oc.carimbo;
-                  const cpaText = oc.comandoIntermediario || oc.cpa || '1º CPA';
+                  const servicoText = oc.servicoDia || 'Serviço das Eleições';
+                  const cpaText = normalizeCpaName(oc.comandoIntermediario || oc.cpa || '1º CPA');
                   const opmText = oc.opm || oc.uop || 'OPM';
                   const crimesList = getCrimesDaOcorrencia(oc);
                   const localText = oc.local || oc.bairro || 'Local não informado';
@@ -736,6 +897,14 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   const bopmText = oc.bopm || 'Não informado';
                   const roText = oc.ro || 'Não informado';
                   const dinamicaText = oc.dinamica || oc.historico || '-';
+
+                  const informanteDesc = [
+                    oc.posto,
+                    oc.nomeGuerra,
+                    oc.rg ? `(RG ${oc.rg})` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ');
 
                   if (viewMode === 'consolidada') {
                     return (
@@ -745,40 +914,59 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                           idx % 2 === 1 ? 'bg-slate-50/40' : 'bg-white'
                         }`}
                       >
-                        {/* 1. CARIMBO DATA HORA */}
+                        {/* 1. DATA / HORA */}
                         <td className="py-2.5 px-3 whitespace-nowrap font-mono text-[11px] text-slate-600 align-top">
                           {carimboText}
                         </td>
 
-                        {/* 2. COMANDO INTERMEDIÁRIO */}
+                        {/* 2. SERVIÇO DO DIA */}
+                        <td className="py-2.5 px-3 align-top">
+                          <span className="font-semibold text-slate-900 leading-snug block">
+                            {servicoText}
+                          </span>
+                        </td>
+
+                        {/* 3. INFORMANTE */}
+                        <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                          {informanteDesc ? (
+                            <div className="text-slate-800">
+                              <span className="font-bold block text-[11px]">{oc.posto} {oc.nomeGuerra}</span>
+                              {oc.rg && <span className="text-[10px] text-slate-500 font-mono">RG: {oc.rg}</span>}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">-</span>
+                          )}
+                        </td>
+
+                        {/* 4. COMANDO */}
                         <td className="py-2.5 px-3 font-bold text-center whitespace-nowrap align-top">
                           <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-bold">
                             {cpaText}
                           </span>
                         </td>
 
-                        {/* 3. OPM */}
+                        {/* 5. OPM */}
                         <td className="py-2.5 px-3 font-bold text-center whitespace-nowrap align-top">
                           <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800 text-[11px] font-bold">
                             {opmText}
                           </span>
                         </td>
 
-                        {/* 4. CRIMES REGISTRADOS NO PLEITO (Pode haver mais de um no mesmo formulário!) */}
+                        {/* 6. CRIME(S) REGISTRADO(S) */}
                         <td className="py-2.5 px-3 align-top">
                           {crimesList.length > 0 ? (
                             <div className="space-y-1">
                               {crimesList.map((item, cIdx) => (
                                 <div
                                   key={cIdx}
-                                  className={`flex items-start gap-1.5 p-1.5 rounded border text-[11px] font-bold leading-tight ${item.color}`}
+                                  className={`flex items-start gap-1 p-1 rounded border text-[11px] font-bold leading-tight ${item.color}`}
                                 >
-                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 opacity-80" />
-                                  <div>
-                                    <span className="block text-[9px] uppercase tracking-wider opacity-75 font-semibold">
+                                  <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5 opacity-80" />
+                                  <div className="min-w-0">
+                                    <span className="block text-[9px] uppercase tracking-wider opacity-70 font-semibold truncate">
                                       {item.categoria}
                                     </span>
-                                    <span>{item.crime}</span>
+                                    <span className="break-words">{item.crime}</span>
                                   </div>
                                 </div>
                               ))}
@@ -791,40 +979,40 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                           )}
                         </td>
 
-                        {/* 5. LOCAL */}
+                        {/* 7. LOCAL */}
                         <td className="py-2.5 px-3 align-top">
                           <span className="font-semibold text-slate-800 block leading-snug">
                             {localText}
                           </span>
                         </td>
 
-                        {/* 6. HORA */}
+                        {/* 8. HORA */}
                         <td className="py-2.5 px-3 font-mono font-bold text-center text-slate-700 whitespace-nowrap align-top">
                           {horaText}
                         </td>
 
-                        {/* 7. BOPM */}
+                        {/* 9. BOPM */}
                         <td className="py-2.5 px-3 font-mono text-center text-slate-700 whitespace-nowrap align-top">
                           <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[11px] font-semibold">
                             {bopmText}
                           </span>
                         </td>
 
-                        {/* 8. RO */}
+                        {/* 10. RO */}
                         <td className="py-2.5 px-3 font-mono text-center text-slate-700 whitespace-nowrap align-top">
                           <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[11px] font-semibold">
                             {roText}
                           </span>
                         </td>
 
-                        {/* 9. DINÂMICA */}
+                        {/* 11. DINÂMICA */}
                         <td className="py-2.5 px-3 align-top">
-                          <p className="text-[11px] text-slate-700 leading-relaxed break-words">
+                          <p className="text-[11px] text-slate-700 leading-relaxed line-clamp-2" title={dinamicaText}>
                             {dinamicaText}
                           </p>
                         </td>
 
-                        {/* 10. FICHA COMPLETA (MODAL) */}
+                        {/* 12. FICHA */}
                         <td className="py-2.5 px-3 text-center align-top whitespace-nowrap">
                           <button
                             onClick={() => setModalOcorrencia(oc)}
@@ -839,7 +1027,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     );
                   }
 
-                  // Modo: Todos os Cabeçalhos da Planilha
+                  // Modo: Todos os Cabeçalhos
                   return (
                     <tr
                       key={oc.id}
@@ -849,6 +1037,16 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     >
                       <td className="py-2.5 px-3 whitespace-nowrap font-mono text-[11px] text-slate-600 align-top">
                         {carimboText}
+                      </td>
+                      <td className="py-2.5 px-3 align-top">
+                        <span className="font-semibold text-slate-900 block text-[11px]">
+                          {servicoText}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                        <span className="font-bold text-slate-800 block text-[11px]">
+                          {informanteDesc || '-'}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 font-bold text-center whitespace-nowrap align-top">
                         <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px]">
@@ -860,74 +1058,53 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                           {opmText}
                         </span>
                       </td>
-
-                      {/* 5 Perguntas */}
-                      <td className="py-2.5 px-3 text-[11px] align-top">
-                        {isNaoHouve(oc.crimesCandidatos) ? (
-                          <span className="text-slate-400">Não houve</span>
-                        ) : (
-                          <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 block">
-                            {oc.crimesCandidatos}
-                          </span>
-                        )}
+                      <td className="py-2.5 px-3 align-top">
+                        <span className={`text-[11px] ${!isNaoHouve(oc.crimesCandidatos) ? 'font-bold text-amber-700' : 'text-slate-400'}`}>
+                          {oc.crimesCandidatos || 'Não houve'}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 text-[11px] align-top">
-                        {isNaoHouve(oc.crimesLocaisVotacao) ? (
-                          <span className="text-slate-400">Não houve</span>
-                        ) : (
-                          <span className="font-bold text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 block">
-                            {oc.crimesLocaisVotacao}
-                          </span>
-                        )}
+                      <td className="py-2.5 px-3 align-top">
+                        <span className={`text-[11px] ${!isNaoHouve(oc.crimesLocaisVotacao) ? 'font-bold text-blue-700' : 'text-slate-400'}`}>
+                          {oc.crimesLocaisVotacao || 'Não houve'}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 text-[11px] align-top">
-                        {isNaoHouve(oc.crimesEleitorais) ? (
-                          <span className="text-slate-400">Não houve</span>
-                        ) : (
-                          <span className="font-bold text-purple-800 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 block">
-                            {oc.crimesEleitorais}
-                          </span>
-                        )}
+                      <td className="py-2.5 px-3 align-top">
+                        <span className={`text-[11px] ${!isNaoHouve(oc.crimesEleitorais) ? 'font-bold text-purple-700' : 'text-slate-400'}`}>
+                          {oc.crimesEleitorais || 'Não houve'}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 text-[11px] align-top">
-                        {isNaoHouve(oc.incidentesSeguranca) ? (
-                          <span className="text-slate-400">Não houve</span>
-                        ) : (
-                          <span className="font-bold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 block">
-                            {oc.incidentesSeguranca}
-                          </span>
-                        )}
+                      <td className="py-2.5 px-3 align-top">
+                        <span className={`text-[11px] ${!isNaoHouve(oc.incidentesSeguranca) ? 'font-bold text-sky-700' : 'text-slate-400'}`}>
+                          {oc.incidentesSeguranca || 'Não houve'}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 text-[11px] align-top">
-                        {isNaoHouve(oc.prisoesApreensoes) ? (
-                          <span className="text-slate-400">Não houve</span>
-                        ) : (
-                          <span className="font-bold text-rose-800 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 block">
-                            {oc.prisoesApreensoes}
-                          </span>
-                        )}
+                      <td className="py-2.5 px-3 align-top">
+                        <span className={`text-[11px] ${!isNaoHouve(oc.prisoesApreensoes) ? 'font-bold text-rose-700' : 'text-slate-400'}`}>
+                          {oc.prisoesApreensoes || 'Não houve'}
+                        </span>
                       </td>
-
-                      <td className="py-2.5 px-3 align-top font-medium">
-                        {localText}
+                      <td className="py-2.5 px-3 align-top">
+                        <span className="font-semibold text-slate-800 block text-[11px]">
+                          {localText}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-center align-top">
+                      <td className="py-2.5 px-3 font-mono font-bold text-center text-slate-700 whitespace-nowrap align-top">
                         {horaText}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-center align-top">
-                        {bopmText}
+                      <td className="py-2.5 px-3 font-mono text-center text-slate-700 whitespace-nowrap align-top">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[11px]">
+                          {bopmText}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-center align-top">
-                        {roText}
-                      </td>
-                      <td className="py-2.5 px-3 align-top text-[11px]">
-                        {dinamicaText}
+                      <td className="py-2.5 px-3 font-mono text-center text-slate-700 whitespace-nowrap align-top">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[11px]">
+                          {roText}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 text-center align-top whitespace-nowrap">
                         <button
                           onClick={() => setModalOcorrencia(oc)}
                           className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-colors cursor-pointer"
-                          title="Ver Ficha Completa"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>Ficha</span>
@@ -942,124 +1119,110 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
         </div>
 
         {/* Paginação */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-2.5 bg-slate-50/80 border-t border-slate-200 text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <span>Exibindo</span>
-            <select
-              value={itemsPerPage}
-              onChange={() => {
-                setCurrentPage(1);
-              }}
-              className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-700 cursor-pointer"
-            >
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
+        {totalPages > 1 && (
+          <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
             <span>
-              de <strong>{filteredOcorrencias.length}</strong> registro(s) da planilha
+              Mostrando {paginatedOcorrencias.length} de {filteredOcorrencias.length} ocorrências
             </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-slate-200 disabled:opacity-40 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-2 font-bold text-slate-900">
+                {currentPage} de {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-slate-200 disabled:opacity-40 cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="px-2.5 py-0.5 font-bold text-slate-800">
-              Página {currentPage} de {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* 3. MODAL: Ficha Completa da Ocorrência (Exibe TODOS os campos da planilha) */}
+      {/* 4. MODAL COM A FICHA COMPLETA DE TODOS OS 18 CAMPOS DO FORMULÁRIO */}
       {modalOcorrencia && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Cabeçalho do Modal */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-blue-600 text-white">
-                  <FileText className="w-5 h-5" />
+                <div className="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                  <FileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                    Ficha Completa da Ocorrência
+                  <h3 className="font-bold text-sm leading-tight text-white uppercase">
+                    Ficha Completa do Envio • Formulário de Ocorrências
                   </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Registro individual sincronizado com o Formulário Google
-                  </p>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Carimbo: {modalOcorrencia.carimbo}
+                  </span>
                 </div>
               </div>
               <button
                 onClick={() => setModalOcorrencia(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Conteúdo do Modal com Todos os Campos */}
-            <div className="p-5 overflow-y-auto space-y-4 text-xs text-slate-700">
-              {/* Identificação Geral */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            {/* Conteúdo do Modal */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+              {/* Bloco 1: Informante & Serviço */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                    Carimbo de Data/Hora
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1 flex items-center gap-1">
+                    <User className="w-3 h-3 text-slate-400" />
+                    <span>Policial Militar Informante</span>
                   </span>
-                  <span className="font-mono font-bold text-slate-900 text-xs">
-                    {modalOcorrencia.carimbo}
-                  </span>
+                  <div className="font-bold text-slate-900 text-sm">
+                    {modalOcorrencia.posto || 'Policial Militar'} {modalOcorrencia.nomeGuerra || '-'}
+                  </div>
+                  {modalOcorrencia.rg && (
+                    <div className="text-[11px] text-slate-600 font-mono mt-0.5">
+                      RG PM: {modalOcorrencia.rg}
+                    </div>
+                  )}
+                  {modalOcorrencia.email && (
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                      <Mail className="w-3 h-3 text-slate-400" />
+                      <span>{modalOcorrencia.email}</span>
+                    </div>
+                  )}
                 </div>
+
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                    Comando Intermediário
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1 flex items-center gap-1">
+                    <Building2 className="w-3 h-3 text-slate-400" />
+                    <span>Unidade & Serviço</span>
                   </span>
-                  <span className="font-bold text-indigo-700 text-xs">
-                    {modalOcorrencia.comandoIntermediario || modalOcorrencia.cpa}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                    OPM
-                  </span>
-                  <span className="font-bold text-slate-900 text-xs">
-                    {modalOcorrencia.opm || modalOcorrencia.uop}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                    Hora do Fato
-                  </span>
-                  <span className="font-mono font-bold text-slate-900 text-xs flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    {modalOcorrencia.hora || '-'}
-                  </span>
+                  <div className="font-bold text-slate-900 text-sm">
+                    {normalizeCpaName(modalOcorrencia.comandoIntermediario || modalOcorrencia.cpa || '')} • {modalOcorrencia.opm || modalOcorrencia.uop || '-'}
+                  </div>
+                  <div className="text-[11px] text-slate-700 mt-0.5 font-medium">
+                    {modalOcorrencia.servicoDia || 'Serviço das Eleições'}
+                  </div>
                 </div>
               </div>
 
-              {/* As 5 Perguntas de Múltipla Escolha da Planilha */}
+              {/* Bloco 2: As 5 Categorias Oficiais */}
               <div className="space-y-2">
-                <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-1">
-                  <ShieldAlert className="w-4 h-4 text-blue-600" />
-                  <span>Respostas das 5 Categorias de Crimes no Pleito</span>
-                </h4>
+                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Respostas das 5 Categorias Oficiais do Formulário</span>
+                </span>
 
-                <div className="space-y-2">
-                  {/* 1. Contra Candidatos */}
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                <div className="space-y-1.5">
+                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
                       1. Crimes comuns contra candidatos
                     </span>
                     {!isNaoHouve(modalOcorrencia.crimesCandidatos) ? (
@@ -1072,9 +1235,8 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     )}
                   </div>
 
-                  {/* 2. Nos Locais de Votação/Apuração */}
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
                       2. Crimes comuns nos locais de votação/apuração
                     </span>
                     {!isNaoHouve(modalOcorrencia.crimesLocaisVotacao) ? (
@@ -1087,9 +1249,8 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     )}
                   </div>
 
-                  {/* 3. Crimes Eleitorais */}
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
                       3. Crimes Eleitorais
                     </span>
                     {!isNaoHouve(modalOcorrencia.crimesEleitorais) ? (
@@ -1102,9 +1263,8 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     )}
                   </div>
 
-                  {/* 4. Incidentes de Segurança Pública */}
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
                       4. Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação
                     </span>
                     {!isNaoHouve(modalOcorrencia.incidentesSeguranca) ? (
@@ -1117,9 +1277,8 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     )}
                   </div>
 
-                  {/* 5. Prisões / Apreensões */}
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
                       5. Prisões/apreensões no entorno e/ou locais de votação
                     </span>
                     {!isNaoHouve(modalOcorrencia.prisoesApreensoes) ? (
@@ -1134,10 +1293,10 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                 </div>
               </div>
 
-              {/* Detalhamento do Fato: Local, BOPM, RO e Dinâmica */}
+              {/* Bloco 3: Dados Operacionais e Dinâmica */}
               <div className="space-y-3 pt-1 border-t border-slate-100">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 sm:col-span-1">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 sm:col-span-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">
                       Local do Fato
                     </span>
@@ -1149,27 +1308,27 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
 
                   <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                      BOPM
+                      Hora
                     </span>
                     <span className="font-mono font-bold text-slate-900 block mt-0.5">
-                      {modalOcorrencia.bopm || 'Não informado'}
+                      {modalOcorrencia.hora || '-'}
                     </span>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                      RO (Registro Policial)
+                      BOPM / RO
                     </span>
                     <span className="font-mono font-bold text-slate-900 block mt-0.5">
-                      {modalOcorrencia.ro || 'Não informado'}
+                      {modalOcorrencia.bopm || 'Sem BOPM'} • {modalOcorrencia.ro || 'Sem RO'}
                     </span>
                   </div>
                 </div>
 
-                {/* Dinâmica */}
+                {/* Dinâmica Completa */}
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    Dinâmica dos Fatos
+                    Dinâmica da Ocorrência de Vulto / Interesse
                   </span>
                   <p className="text-slate-800 text-xs leading-relaxed whitespace-pre-wrap">
                     {modalOcorrencia.dinamica || 'Sem relato da dinâmica.'}

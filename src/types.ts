@@ -23,6 +23,11 @@ export interface LocalVotacao {
   horaImplantacao?: string;
   horaDesmobilizacao?: string;
   linhaPlanilha?: number; // Número exato da linha física na planilha (ex: 4978)
+  isDuplicado?: boolean;
+  duplicidadeMotivo?: string;
+  duplicidadeTipo?: 'CPA' | 'UOP' | 'INTERNA';
+  duplicidadeLinhas?: number[];
+  duplicidadeUnidades?: string[];
 
   // Compatible aliases for components and reports
   local: string;
@@ -46,6 +51,13 @@ export interface Ocorrencia {
   carimbo: string;
   comandoIntermediario?: string;
   opm?: string;
+  servicoDia?: string;
+
+  // Informações do Informante da Planilha Google Forms
+  posto?: string;
+  rg?: string;
+  nomeGuerra?: string;
+  email?: string;
 
   // As 5 perguntas com respostas pré-definidas em múltipla escolha
   crimesCandidatos?: string;

@@ -33,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onManualSync,
   onLogout,
   onOpenSettings,
+  counts,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-xs">
@@ -70,6 +71,15 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <MapPin className="w-3.5 h-3.5" />
             <span>LOCAIS DE VOTAÇÃO</span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                activeTab === 'locais'
+                  ? 'bg-blue-700/80 text-white'
+                  : 'bg-slate-800 text-slate-300'
+              }`}
+            >
+              {counts.locais.toLocaleString('pt-BR')}
+            </span>
           </button>
 
           <button
@@ -82,6 +92,15 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Activity className="w-3.5 h-3.5" />
             <span>OCORRÊNCIAS</span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                activeTab === 'ocorrencias'
+                  ? 'bg-blue-700/80 text-white'
+                  : 'bg-slate-800 text-slate-300'
+              }`}
+            >
+              {counts.ocorrencias}
+            </span>
           </button>
 
           <button
@@ -94,6 +113,15 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <UserX className="w-3.5 h-3.5" />
             <span>FALTAS</span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                activeTab === 'faltas'
+                  ? 'bg-blue-700/80 text-white'
+                  : 'bg-slate-800 text-slate-300'
+              }`}
+            >
+              {counts.faltas}
+            </span>
           </button>
         </nav>
 

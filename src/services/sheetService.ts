@@ -23,12 +23,12 @@ export const isSim = (val: any): boolean => {
   if (val === null || val === undefined) return false;
   if (typeof val === 'boolean') return val;
   const s = String(val).trim().toUpperCase();
+  // Conforme determinação operacional: X / x NÃO é considerado SIM (indica dúvida/em análise)
   return (
     s === 'SIM' ||
     s === 'S' ||
     s === 'TRUE' ||
     s === '1' ||
-    s === 'X' ||
     s === 'OK' ||
     s === 'IMPLANTADA' ||
     s === 'IMPLANTADO' ||
@@ -68,28 +68,34 @@ function isCpaSeparatorOrEmptyRow(row: any): boolean {
 export function parseLocaisCsv(csvText: string): LocalVotacao[] {
   const result = Papa.parse(csvText, {
     header: true,
-    skipEmptyLines: 'greedy',
+    skipEmptyLines: false,
     transformHeader: (header) => header.trim(),
   });
 
   if (!result.data || result.data.length === 0) return [];
 
-  return (result.data as any[])
-    .filter((row) => !isCpaSeparatorOrEmptyRow(row))
-    .map((row, index) => {
-      // Detect column variations
-      const numZona = String(row['NUM_ZONA'] || row['ZONA'] || row['Zona'] || '').trim();
-      const codMunicipio = String(row['COD_MUNICIPIO_TSE'] || row['COD_MUNICIPIO'] || '').trim();
-      const cep = String(row['NUM_CEP_LOCAL'] || row['CEP'] || '').trim();
-      const numLocal = String(row['NUM_LOCAL'] || row['LOCAL'] || '').trim();
-      const qtdSecoes = parseNumber(row['QTD_SECOES'] || row['SECOES']);
-      const qtdAptos = parseNumber(row['QTD_APTOS'] || row['APTOS']);
-      const municipio = String(row['NOM_MUNICIPIO'] || row['MUNICIPIO'] || 'RIO DE JANEIRO').trim();
-      const bairro = String(row['NOM_BAIRRO'] || row['BAIRRO'] || '').trim();
-      const endereco = String(row['ENDERECO_LOCAL'] || row['ENDERECO'] || '').trim();
-      const nomeLocal = String(row['NOM_LOCAL'] || row['LOCAL_VOTACAO'] || row['NOME'] || '').trim();
-      const cpa = String(row['CPA'] || '1° CPA').trim();
-      const uop = String(row['UOP'] || row['BATALHAO'] || '').trim();
+  const locais: LocalVotacao[] = [];
+  const rows = result.data as any[];
+
+  rows.forEach((row, index) => {
+    // Linha física exata na planilha do Google Sheets (1-indexed: linha 1 é o cabeçalho, índice 0 é linha 2)
+    const physicalLine = index + 2;
+
+    if (isCpaSeparatorOrEmptyRow(row)) return;
+
+    // Detect column variations
+    const numZona = String(row['NUM_ZONA'] || row['ZONA'] || row['Zona'] || '').trim();
+    const codMunicipio = String(row['COD_MUNICIPIO_TSE'] || row['COD_MUNICIPIO'] || '').trim();
+    const cep = String(row['NUM_CEP_LOCAL'] || row['CEP'] || '').trim();
+    const numLocal = String(row['NUM_LOCAL'] || row['LOCAL'] || '').trim();
+    const qtdSecoes = parseNumber(row['QTD_SECOES'] || row['SECOES']);
+    const qtdAptos = parseNumber(row['QTD_APTOS'] || row['APTOS']);
+    const municipio = String(row['NOM_MUNICIPIO'] || row['MUNICIPIO'] || 'RIO DE JANEIRO').trim();
+    const bairro = String(row['NOM_BAIRRO'] || row['BAIRRO'] || '').trim();
+    const endereco = String(row['ENDERECO_LOCAL'] || row['ENDERECO'] || '').trim();
+    const nomeLocal = String(row['NOM_LOCAL'] || row['LOCAL_VOTACAO'] || row['NOME'] || '').trim();
+    const cpa = String(row['CPA'] || '1° CPA').trim();
+    const uop = String(row['UOP'] || row['BATALHAO'] || '').trim();
 
       // Sensitive area & armored support
       const keySensivel = Object.keys(row).find((k) => k.toUpperCase().includes('SENSIV') || k.toUpperCase().includes('SENSÍV'));
@@ -179,10 +185,7 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
       const isDesmobilizada = parseBool(desmobilizadaRaw);
       const localResolved = nomeLocal || (endereco ? `Local - ${endereco}` : `Local ${numLocal || index + 1}`);
 
-      // Linha física exata na planilha (1-indexed, linha 1 é o cabeçalho)
-      const physicalLine = index + 2;
-
-      return {
+      locais.push({
         id: `local-${index + 1}-${numLocal || Math.random().toString(36).substr(2, 5)}`,
         numZona: numZona || '0',
         codMunicipio,
@@ -214,9 +217,10 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
         necessidadeImplantacaoDomingo: isImplantacaoDomingo,
         utilizacaoBlindado: isBlindado,
         observacao: observacoes,
-      };
-    })
-    .filter((item) => item.nomeLocal && item.nomeLocal.length > 0);
+      });
+  });
+
+  return locais.filter((item) => item.nomeLocal && item.nomeLocal.length > 0);
 }
 
 function classifyOcorrenciaCategoria(row: any): string {
@@ -268,17 +272,24 @@ export function parseOcorrenciasCsv(csvText: string): Ocorrencia[] {
       new Date().toLocaleString('pt-BR')
     ).trim();
 
-    // 2. Comando Intermediário (CPA) e OPM
+    // 2. Comando Intermediário (CPA), OPM e Informante
     let comandoIntermediario = '1° CPA';
     let opm = '';
+    let posto = '';
+    let rg = '';
+    let nomeGuerra = '';
+    let email = '';
+
     for (const k of keys) {
-      const upper = k.toUpperCase();
+      const upper = k.toUpperCase().trim();
+      const val = String(row[k] || '').trim();
+
       if (
         upper.includes('COMANDO INTERMEDIÁRIO') ||
         upper.includes('COMANDO INTERMEDIARIO') ||
         upper === 'CPA'
       ) {
-        comandoIntermediario = normalizeCpaName(String(row[k] || ''));
+        comandoIntermediario = normalizeCpaName(val);
       }
       if (
         upper === 'OPM' ||
@@ -286,7 +297,19 @@ export function parseOcorrenciasCsv(csvText: string): Ocorrencia[] {
         upper.includes('BATALHÃO') ||
         upper.includes('BATALHAO')
       ) {
-        opm = String(row[k] || '').trim();
+        opm = val;
+      }
+      if (!posto && (upper === 'POSTO' || upper === 'GRADUAÇÃO' || upper === 'POSTO/GRADUAÇÃO')) {
+        posto = val;
+      }
+      if (!rg && (upper === 'RG' || upper === 'MATRÍCULA' || upper === 'MATRICULA')) {
+        rg = val;
+      }
+      if (!nomeGuerra && (upper === 'NOME DE GUERRA' || upper === 'NOME GUERRA' || upper === 'GUERRA')) {
+        nomeGuerra = val;
+      }
+      if (!email && (upper.includes('EMAIL') || upper.includes('E-MAIL'))) {
+        email = val;
       }
     }
 
@@ -377,24 +400,67 @@ export function parseOcorrenciasCsv(csvText: string): Ocorrencia[] {
     let bopm = '';
     let ro = '';
     let dinamica = '';
+    let servicoDia = '';
 
     for (const k of keys) {
-      const upper = k.toUpperCase();
+      const upper = k.toUpperCase().trim();
       const val = String(row[k] || '').trim();
+      if (!val) continue;
 
-      if (!local && (upper === 'LOCAL' || upper.includes('LOCAL DO FATO') || upper.includes('LOCAL DE VOTAÇÃO') || upper.includes('LOCALIDADE') || upper.includes('ENDEREÇO'))) {
+      if (!servicoDia && (upper.includes('SERVIÇO DO DIA') || upper.includes('SERVICO DO DIA'))) {
+        servicoDia = val;
+      }
+
+      // NUNCA confundir com Endereço de e-mail!
+      if (upper.includes('EMAIL') || upper.includes('E-MAIL')) continue;
+
+      if (
+        !local &&
+        (upper.includes('LOCAL DA OCORRÊNCIA') ||
+          upper.includes('LOCAL DA OCORRENCIA') ||
+          upper.includes('LOCAL DO FATO') ||
+          upper === 'LOCAL' ||
+          upper.includes('LOCAL DE VOTAÇÃO') ||
+          upper.includes('LOCALIDADE') ||
+          (upper.includes('ENDEREÇO') && !upper.includes('EMAIL')))
+      ) {
         local = val;
       }
-      if (!hora && (upper === 'HORA' || upper.includes('HORA DO FATO') || upper === 'HORÁRIO')) {
+      if (
+        !hora &&
+        (upper.includes('HORA DA OCORRÊNCIA') ||
+          upper.includes('HORA DA OCORRENCIA') ||
+          upper.includes('HORA DO FATO') ||
+          upper === 'HORA' ||
+          upper === 'HORÁRIO' ||
+          upper === 'HORARIO')
+      ) {
         hora = val;
       }
       if (!bopm && (upper.includes('BOPM') || upper.includes('BO-PM') || upper.includes('BO PM'))) {
         bopm = val;
       }
-      if (!ro && (upper === 'RO' || upper.includes('Nº RO') || upper.includes('REGISTRO DE OCORRÊNCIA') || upper.includes('REGISTRO DE OCORRENCIA') || upper === 'DP')) {
+      if (
+        !ro &&
+        (upper === 'RO' ||
+          upper.includes('R.O.') ||
+          upper.includes('R.O') ||
+          upper.includes('Nº RO') ||
+          upper.includes('REGISTRO DE OCORRÊNCIA') ||
+          upper.includes('REGISTRO DE OCORRENCIA') ||
+          upper === 'DP')
+      ) {
         ro = val;
       }
-      if (!dinamica && (upper.includes('DINÂMICA') || upper.includes('DINAMICA') || upper.includes('HISTÓRICO') || upper.includes('HISTORICO') || upper.includes('DESCRIÇÃO') || upper.includes('RELATO'))) {
+      if (
+        !dinamica &&
+        (upper.includes('DINÂMICA') ||
+          upper.includes('DINAMICA') ||
+          upper.includes('HISTÓRICO') ||
+          upper.includes('HISTORICO') ||
+          upper.includes('DESCRIÇÃO') ||
+          upper.includes('RELATO'))
+      ) {
         dinamica = val;
       }
     }
@@ -422,6 +488,13 @@ export function parseOcorrenciasCsv(csvText: string): Ocorrencia[] {
       carimbo,
       comandoIntermediario,
       opm: uop,
+      servicoDia: servicoDia || undefined,
+
+      // Informante do Formulário Google
+      posto: posto || undefined,
+      rg: rg || undefined,
+      nomeGuerra: nomeGuerra || undefined,
+      email: email || undefined,
 
       // As 5 perguntas com respostas pré-definidas
       crimesCandidatos,
@@ -675,7 +748,7 @@ export function parseFaltasCsv(csvText: string): FaltaEfetivo[] {
         posto: postoInf,
         rg: rgInf || '',
         nomeGuerra: nomeInf || '',
-        comandoIntermediario: rawCpa || cpa,
+        comandoIntermediario: cpa,
         opm: opmDestino,
         faltasPoe: faltasRaw || 'sem alteração',
         dispensasPoe: dispensasRaw || 'sem alteração',
@@ -702,21 +775,27 @@ export function parseFaltasCsv(csvText: string): FaltaEfetivo[] {
   }
 
   // Formato tradicional tabular padrão
-  return rows.map((row, index) => ({
-    id: `falta-${index + 1}`,
-    carimbo: String(row['Carimbo de data/hora'] || row['CARIMBO'] || new Date().toLocaleString('pt-BR')).trim(),
-    data: String(row['Data da Escala'] || row['DATA'] || '04/10/2026').trim(),
-    turno: String(row['Turno'] || row['TURNO'] || 'DOMINGO').trim().toUpperCase(),
-    postoGrad: String(row['Posto/Graduação'] || row['GRADUAÇÃO'] || row['POSTO_GRAD'] || '').trim().toUpperCase(),
-    rg: String(row['RG'] || row['Matrícula'] || row['RG_PM'] || '').trim(),
-    nomeGuerra: String(row['Nome de Guerra'] || row['NOME_GUERRA'] || '').trim().toUpperCase(),
-    opmOrigem: String(row['OPM de Origem'] || row['OPM_ORIGEM'] || '').trim(),
-    uopDestino: String(row['UOP Destino / Emprego'] || row['UOP_DESTINO'] || '').trim(),
-    localVotacao: String(row['Local de Votação Designado'] || row['LOCAL_VOTACAO'] || '').trim(),
-    motivo: String(row['Motivo da Falta'] || row['MOTIVO'] || row['Justificativa'] || '').trim(),
-    substituto: String(row['Policial Substituto'] || row['SUBSTITUTO'] || 'AGUARDANDO').trim(),
-    status: (row['Status'] || row['STATUS'] || 'PENDENTE').trim().toUpperCase() as any,
-  })).filter((f) => f.nomeGuerra || f.rg);
+  return rows.map((row, index) => {
+    const rawCpa = String(row['COMANDO INTERMEDIÁRIO'] || row['COMANDO INTERMEDIARIO'] || row['CPA'] || '1º CPA').trim();
+    const cpa = normalizeCpaName(rawCpa);
+    return {
+      id: `falta-${index + 1}`,
+      carimbo: String(row['Carimbo de data/hora'] || row['CARIMBO'] || new Date().toLocaleString('pt-BR')).trim(),
+      data: String(row['Data da Escala'] || row['DATA'] || '04/10/2026').trim(),
+      turno: String(row['Turno'] || row['TURNO'] || 'DOMINGO').trim().toUpperCase(),
+      postoGrad: String(row['Posto/Graduação'] || row['GRADUAÇÃO'] || row['POSTO_GRAD'] || '').trim().toUpperCase(),
+      rg: String(row['RG'] || row['Matrícula'] || row['RG_PM'] || '').trim(),
+      nomeGuerra: String(row['Nome de Guerra'] || row['NOME_GUERRA'] || '').trim().toUpperCase(),
+      opmOrigem: String(row['OPM de Origem'] || row['OPM_ORIGEM'] || '').trim(),
+      uopDestino: String(row['UOP Destino / Emprego'] || row['UOP_DESTINO'] || '').trim(),
+      localVotacao: String(row['Local de Votação Designado'] || row['LOCAL_VOTACAO'] || '').trim(),
+      motivo: String(row['Motivo da Falta'] || row['MOTIVO'] || row['Justificativa'] || '').trim(),
+      substituto: String(row['Policial Substituto'] || row['SUBSTITUTO'] || 'AGUARDANDO').trim(),
+      status: (row['Status'] || row['STATUS'] || 'PENDENTE').trim().toUpperCase() as any,
+      cpa,
+      comandoIntermediario: cpa,
+    };
+  }).filter((f) => f.nomeGuerra || f.rg);
 }
 
 export function normalizeGoogleSheetsUrl(url: string): { primary: string; fallbacks: string[] } {
@@ -744,12 +823,25 @@ export function normalizeGoogleSheetsUrl(url: string): { primary: string; fallba
   if (docMatch && docMatch[1] !== 'e') {
     const sheetId = docMatch[1];
     const gidMatch = trimmed.match(/[?&#]gid=([0-9]+)/);
-    const gid = gidMatch ? gidMatch[1] : '0';
+    let gid = gidMatch ? gidMatch[1] : '';
+
+    // Mapeamento automático inteligente das abas oficiais se o operador colar URL sem gid ou com gid=0
+    if (!gid || gid === '0') {
+      if (sheetId === '1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE') {
+        gid = '2054351637'; // Aba de Respostas do Formulário de Ocorrências
+      } else if (sheetId === '1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8') {
+        gid = '613414577'; // Aba de Respostas do Formulário de Faltas
+      } else if (sheetId === '1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw') {
+        gid = '907029771'; // Aba PLANILHA GERAL DASH
+      } else {
+        gid = '0';
+      }
+    }
 
     return {
-      primary: `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+      primary: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
       fallbacks: [
-        `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
       ],
     };
   }

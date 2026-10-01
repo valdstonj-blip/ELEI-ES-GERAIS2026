@@ -55,9 +55,9 @@ export default function App() {
   };
 
   /**
-   * Sincronização direta com a Planilha Google Sheets
-   * - Atualiza bases configuradas
-   * - Apresenta diagnóstico claro ao operador se a URL estiver 404
+   * Sincronização direta com as 3 Planilhas Google Sheets em paralelo
+   * - Executa as 3 requisições de forma simultânea (Promise.allSettled)
+   * - Nunca bloqueia uma base se a outra estiver lenta
    */
   const syncData = useCallback(async (silent = false) => {
     setIsSyncing(true);
@@ -66,59 +66,70 @@ export default function App() {
     let errorMessage = '';
 
     try {
+      const tasks: Promise<void>[] = [];
+
       // 1. Locais de Votação (Planilha Geral Dash)
-      const targetUrl = CsvHelper.getLocaisSheetUrl() || DEFAULT_SHEET_URL;
-      try {
-        const csvText = await fetchCsvWithTimeout(targetUrl);
-        const parsed = parseLocaisCsv(csvText);
-        if (parsed && parsed.length > 0) {
-          setLocais(parsed);
-          CsvHelper.saveLocais(parsed);
-          updatedSources++;
-          const imp = parsed.filter((l) => isSim(l.implantada)).length;
-          const desm = parsed.filter((l) => isSim(l.desmobilizada)).length;
-          detalhes = `${parsed.length.toLocaleString('pt-BR')} locais (${imp} urnas implantadas, ${desm} desmobilizadas)`;
-        }
-      } catch (err: any) {
-        console.warn('Aviso sincronização remota locais:', err);
-        if (err?.message?.includes('404')) {
-          errorMessage = 'O link de Locais retornou Erro 404 no Google. Clique em "Conectar Planilhas" para colar a URL publicada.';
-        } else {
-          errorMessage = `Falha ao conectar no Google: ${err?.message || 'Link inacessível'}`;
-        }
-      }
-
-      // 2. Ocorrências (opcional)
-      const ocorrenciasUrl = CsvHelper.getOcorrenciasSheetUrl();
-      if (ocorrenciasUrl && ocorrenciasUrl.startsWith('http')) {
+      const locaisTask = (async () => {
+        const targetUrl = CsvHelper.getLocaisSheetUrl() || DEFAULT_SHEET_URL;
         try {
-          const csvText = await fetchCsvWithTimeout(ocorrenciasUrl);
-          const parsed = parseOcorrenciasCsv(csvText);
-          if (Array.isArray(parsed)) {
-            setOcorrencias(parsed);
-            CsvHelper.saveOcorrencias(parsed);
-            updatedSources++;
-          }
-        } catch (err: any) {
-          console.warn('Erro ao atualizar Planilha de Ocorrências:', err);
-        }
-      }
-
-      // 3. Faltas de Efetivo (opcional)
-      const faltasUrl = CsvHelper.getFaltasSheetUrl();
-      if (faltasUrl && faltasUrl.startsWith('http')) {
-        try {
-          const csvText = await fetchCsvWithTimeout(faltasUrl);
-          const parsed = parseFaltasCsv(csvText);
+          const csvText = await fetchCsvWithTimeout(targetUrl);
+          const parsed = parseLocaisCsv(csvText);
           if (parsed && parsed.length > 0) {
-            setFaltas(parsed);
-            CsvHelper.saveFaltas(parsed);
+            setLocais(parsed);
+            CsvHelper.saveLocais(parsed);
             updatedSources++;
+            const imp = parsed.filter((l) => isSim(l.implantada)).length;
+            const desm = parsed.filter((l) => isSim(l.desmobilizada)).length;
+            detalhes = `${parsed.length.toLocaleString('pt-BR')} locais (${imp} urnas implantadas, ${desm} desmobilizadas)`;
           }
         } catch (err: any) {
-          console.warn('Erro ao atualizar Planilha de Faltas:', err);
+          console.warn('Aviso sincronização remota locais:', err);
+          if (err?.message?.includes('404')) {
+            errorMessage = 'O link de Locais retornou Erro 404 no Google. Verifique o link em "Conectar Planilhas".';
+          }
         }
-      }
+      })();
+      tasks.push(locaisTask);
+
+      // 2. Ocorrências (Planilha de Respostas do Formulário)
+      const ocorrenciasTask = (async () => {
+        const ocorrenciasUrl = CsvHelper.getOcorrenciasSheetUrl();
+        if (ocorrenciasUrl && ocorrenciasUrl.startsWith('http')) {
+          try {
+            const csvText = await fetchCsvWithTimeout(ocorrenciasUrl);
+            const parsed = parseOcorrenciasCsv(csvText);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setOcorrencias(parsed);
+              CsvHelper.saveOcorrencias(parsed);
+              updatedSources++;
+            }
+          } catch (err: any) {
+            console.warn('Erro ao atualizar Planilha de Ocorrências:', err);
+          }
+        }
+      })();
+      tasks.push(ocorrenciasTask);
+
+      // 3. Faltas de Efetivo (Planilha de Respostas do Formulário POE)
+      const faltasTask = (async () => {
+        const faltasUrl = CsvHelper.getFaltasSheetUrl();
+        if (faltasUrl && faltasUrl.startsWith('http')) {
+          try {
+            const csvText = await fetchCsvWithTimeout(faltasUrl);
+            const parsed = parseFaltasCsv(csvText);
+            if (parsed && parsed.length > 0) {
+              setFaltas(parsed);
+              CsvHelper.saveFaltas(parsed);
+              updatedSources++;
+            }
+          } catch (err: any) {
+            console.warn('Erro ao atualizar Planilha de Faltas:', err);
+          }
+        }
+      })();
+      tasks.push(faltasTask);
+
+      await Promise.allSettled(tasks);
 
       const nowStr = new Date().toLocaleTimeString('pt-BR');
       setLastSyncTime(nowStr);
@@ -267,11 +278,19 @@ export default function App() {
             lastSyncTime={lastSyncTime}
             onSync={() => syncData(false)}
             isSyncing={isSyncing}
+            onOpenSettings={() => setIsConnectionModalOpen(true)}
           />
         )}
 
         {activeTab === 'faltas' && (
-          <FaltasTab faltas={faltas} onAddFalta={handleAddFalta} />
+          <FaltasTab
+            faltas={faltas}
+            onAddFalta={handleAddFalta}
+            lastSyncTime={lastSyncTime}
+            onSync={() => syncData(false)}
+            isSyncing={isSyncing}
+            onOpenSettings={() => setIsConnectionModalOpen(true)}
+          />
         )}
       </main>
 

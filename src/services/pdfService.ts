@@ -118,6 +118,7 @@ export function exportLocaisPdf(
   if (filters?.statusFilter === 'SENSIVEIS') filtered = filtered.filter((l) => isSim(l.areaSensivel));
   if (filters?.statusFilter === 'DOMINGO') filtered = filtered.filter((l) => isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo));
   if (filters?.statusFilter === 'BLINDADO') filtered = filtered.filter((l) => isSim(l.blindado) || isSim(l.utilizacaoBlindado));
+  if (filters?.statusFilter === 'DUPLICIDADES') filtered = filtered.filter((l) => l.isDuplicado);
 
   const isObsVal = (l: LocalVotacao) => {
     const obs = (l.observacoes || l.observacao || '').trim();
@@ -160,6 +161,7 @@ export function exportLocaisPdf(
   }
 
   const isAlteracoesFilter = filters?.statusFilter === 'ALTERACOES';
+  const isDuplicidadesFilter = filters?.statusFilter === 'DUPLICIDADES';
   const total = filtered.length;
   const sensiveis = filtered.filter((l) => isSim(l.areaSensivel)).length;
   const blindado = filtered.filter((l) => isSim(l.blindado) || isSim(l.utilizacaoBlindado)).length;
@@ -298,6 +300,20 @@ export function exportLocaisPdf(
   // Toda a base filtrada (sem colunas de efetivo conforme solicitado)
   // =========================================================================
   const detailRows = filtered.map((l) => {
+    if (isDuplicidadesFilter) {
+      return [
+        l.numZona || l.zonaEleitoral || '',
+        l.linhaPlanilha ? `L.${l.linhaPlanilha}` : '-',
+        normalizeCpaName(l.cpa),
+        l.uop || '',
+        (l.nomeLocal || l.local || '').slice(0, 36),
+        (l.endereco || '').slice(0, 34),
+        isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
+        isSim(l.blindado) || isSim(l.utilizacaoBlindado) ? 'SIM' : 'NÃO',
+        (l.duplicidadeMotivo || 'Duplicidade detectada').slice(0, 65),
+      ];
+    }
+
     const row = [
       l.numZona || l.zonaEleitoral || '',
       normalizeCpaName(l.cpa),
@@ -324,7 +340,19 @@ export function exportLocaisPdf(
   autoTable(doc, {
     startY: 26,
     head: [
-      isAlteracoesFilter
+      isDuplicidadesFilter
+        ? [
+            'Zona',
+            'Linha',
+            'CPA',
+            'UOP',
+            'Local de Votação',
+            'Endereço',
+            'Sensível',
+            'Blindado',
+            'Identificação da Duplicidade / Conflito Territorial',
+          ]
+        : isAlteracoesFilter
         ? [
             'Zona',
             'CPA',
@@ -450,6 +478,7 @@ export function matchesCarimboDate(
 ): boolean {
   if (!carimbo && !fallbackText) return false;
   const c = (carimbo || '').trim().toLowerCase();
+  const fb = (fallbackText || '').trim().toLowerCase();
 
   if (targetDay === '03OUT') {
     // Carimbo contendo 03/10, 3/10, 03out, 03-10 ou 3-10
@@ -463,9 +492,15 @@ export function matchesCarimboDate(
       return true;
     }
     // Fallback caso o carimbo venha com formato diferente ou de pré-teste (ex: 23/09)
-    if (fallbackText && !c.includes('/10')) {
-      const fb = fallbackText.toLowerCase();
-      if (fb.includes('03out') || fb.includes('03/10') || fb.includes('3/10')) {
+    if (fb && !c.includes('/10')) {
+      if (
+        fb.includes('03out') ||
+        fb.includes('03/10') ||
+        fb.includes('3/10') ||
+        fb.includes('sábado') ||
+        fb.includes('sabado') ||
+        fb.includes('03 de out')
+      ) {
         return true;
       }
     }
@@ -484,9 +519,18 @@ export function matchesCarimboDate(
       return true;
     }
     // Fallback caso o carimbo venha com formato diferente ou de pré-teste
-    if (fallbackText && !c.includes('/10')) {
-      const fb = fallbackText.toLowerCase();
-      if (fb.includes('04out') || fb.includes('04/10') || fb.includes('4/10')) {
+    if (fb && !c.includes('/10')) {
+      if (
+        fb.includes('04out') ||
+        fb.includes('04/10') ||
+        fb.includes('4/10') ||
+        fb.includes('domingo') ||
+        fb.includes('04 de out')
+      ) {
+        // Se for serviço iniciado no dia 03 (ex: "Serviço do dia 03OUT26"), prioriza 03OUT
+        if (fb.includes('serviço do dia 03') || fb.includes('servico do dia 03') || fb.includes('03out26 ( 14:00')) {
+          return false;
+        }
         return true;
       }
     }
@@ -496,12 +540,37 @@ export function matchesCarimboDate(
   return true;
 }
 
+function isNaoHouve(val: string | undefined): boolean {
+  if (!val) return true;
+  const s = val.trim().toLowerCase();
+  return (
+    s === 'não houve' ||
+    s === 'nao houve' ||
+    s === 'sem alteração' ||
+    s === 'sem alteracao' ||
+    s === 'nenhuma' ||
+    s === 'nenhum' ||
+    s === '-' ||
+    s === 'ok' ||
+    s === ''
+  );
+}
+
+export interface OcorrenciasPdfOptions {
+  dia?: 'TODOS' | '03OUT' | '04OUT' | string;
+  cpa?: string;
+  opm?: string;
+  crimeFilter?: string;
+  search?: string;
+}
+
 /**
- * Exporta o Relatório de Ocorrências com suporte a filtragem estrita pelo Carimbo de Data/Hora (03OUT ou 04OUT)
+ * Exporta o Relatório de Ocorrências com suporte a filtragem por CPA, OPM e Carimbo de Data/Hora (03OUT ou 04OUT)
  */
 export function exportOcorrenciasPdf(
   ocorrencias: Ocorrencia[],
-  diaFilter: 'TODOS' | '03OUT' | '04OUT' | string = 'TODOS'
+  diaOrOptions: 'TODOS' | '03OUT' | '04OUT' | string | OcorrenciasPdfOptions = 'TODOS',
+  extraOptions?: OcorrenciasPdfOptions
 ) {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -509,12 +578,86 @@ export function exportOcorrenciasPdf(
     format: 'a4',
   });
 
-  // Filtragem estrita focando no Carimbo de Data e Hora se o operador solicitou dia específico
+  let options: OcorrenciasPdfOptions = {};
+  if (typeof diaOrOptions === 'string') {
+    options = { dia: diaOrOptions, ...extraOptions };
+  } else if (typeof diaOrOptions === 'object' && diaOrOptions !== null) {
+    options = { ...diaOrOptions };
+  }
+
+  const diaFilter = options.dia || 'TODOS';
+  const cpaFilter = options.cpa || 'TODOS';
+  const opmFilter = options.opm || 'TODAS';
+  const crimeFilter = options.crimeFilter || 'TODOS';
+  const searchFilter = (options.search || '').trim().toLowerCase();
+
+  // 1. Filtragem por CPA
   let filtered = ocorrencias;
+  if (cpaFilter !== 'TODOS') {
+    filtered = filtered.filter((o) => {
+      const cpaVal = normalizeCpaName(o.comandoIntermediario || o.cpa || '');
+      return cpaVal === cpaFilter;
+    });
+  }
+
+  // 2. Filtragem por OPM
+  if (opmFilter !== 'TODAS') {
+    filtered = filtered.filter((o) => {
+      const opmVal = (o.opm || o.uop || '').trim();
+      return opmVal === opmFilter;
+    });
+  }
+
+  // 3. Filtragem por Dia com foco no Carimbo de Data e Hora
   if (diaFilter === '03OUT' || diaFilter === '04OUT') {
-    filtered = ocorrencias.filter((o) =>
-      matchesCarimboDate(o.carimbo, diaFilter, `${o.dataHoraFato || ''} ${o.dinamica || ''}`)
+    filtered = filtered.filter((o) =>
+      matchesCarimboDate(o.carimbo, diaFilter, `${o.servicoDia || ''} ${o.dataHoraFato || ''} ${o.dinamica || ''}`)
     );
+  }
+
+  // 4. Filtragem por categoria de crime se selecionada
+  if (crimeFilter !== 'TODOS') {
+    filtered = filtered.filter((oc) => {
+      if (crimeFilter === 'Crimes comuns contra candidatos') return !isNaoHouve(oc.crimesCandidatos);
+      if (crimeFilter === 'Crimes comuns nos locais de votação/apuração') return !isNaoHouve(oc.crimesLocaisVotacao);
+      if (crimeFilter === 'Crimes Eleitorais') return !isNaoHouve(oc.crimesEleitorais);
+      if (crimeFilter === 'Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação') {
+        return !isNaoHouve(oc.incidentesSeguranca);
+      }
+      if (crimeFilter === 'Prisões/apreensões no entorno e/ou locais de votação') return !isNaoHouve(oc.prisoesApreensoes);
+      return true;
+    });
+  }
+
+  // 5. Busca textual ampla
+  if (searchFilter) {
+    filtered = filtered.filter((oc) => {
+      const cpaVal = normalizeCpaName(oc.comandoIntermediario || oc.cpa || '').toLowerCase();
+      const opmVal = (oc.opm || oc.uop || '').toLowerCase();
+      const carimbo = (oc.carimbo || '').toLowerCase();
+      const servico = (oc.servicoDia || '').toLowerCase();
+      const local = (oc.local || oc.bairro || oc.localidade || '').toLowerCase();
+      const hora = (oc.hora || '').toLowerCase();
+      const bopm = (oc.bopm || '').toLowerCase();
+      const ro = (oc.ro || '').toLowerCase();
+      const dinamica = (oc.dinamica || oc.historico || '').toLowerCase();
+      const informante = `${oc.posto || ''} ${oc.nomeGuerra || ''} ${oc.rg || ''}`.toLowerCase();
+      const crimesStr = (oc.crimesRegistrados || []).join(' ').toLowerCase();
+
+      return (
+        carimbo.includes(searchFilter) ||
+        servico.includes(searchFilter) ||
+        cpaVal.includes(searchFilter) ||
+        opmVal.includes(searchFilter) ||
+        local.includes(searchFilter) ||
+        hora.includes(searchFilter) ||
+        bopm.includes(searchFilter) ||
+        ro.includes(searchFilter) ||
+        dinamica.includes(searchFilter) ||
+        informante.includes(searchFilter) ||
+        crimesStr.includes(searchFilter)
+      );
+    });
   }
 
   const total = filtered.length;
@@ -526,14 +669,23 @@ export function exportOcorrenciasPdf(
       ? 'DIA 04OUT26 (DOMINGO)'
       : 'GERAL (TODOS OS DIAS)';
 
-  const fileSuffix =
-    diaFilter === '03OUT'
-      ? '03OUT26'
-      : diaFilter === '04OUT'
-      ? '04OUT26'
-      : 'GERAL';
+  // Detalhamento dos filtros para o subtítulo do relatório
+  const filterParts: string[] = [];
+  if (cpaFilter !== 'TODOS') filterParts.push(`Comando: ${cpaFilter}`);
+  if (opmFilter !== 'TODAS') filterParts.push(`OPM: ${opmFilter}`);
+  filterParts.push(`Período: ${diaLabel}`);
+  const filtroSubtitle = filterParts.join(' • ');
 
-  const rows = filtered.map((o) => {
+  // Nome do arquivo de saída
+  const fileParts = ['RELATORIO_OCORRENCIAS'];
+  if (cpaFilter !== 'TODOS') fileParts.push(cpaFilter.replace(/[^A-Za-z0-9]/g, '_'));
+  if (opmFilter !== 'TODAS') fileParts.push(opmFilter.replace(/[^A-Za-z0-9]/g, '_'));
+  if (diaFilter === '03OUT') fileParts.push('03OUT26');
+  else if (diaFilter === '04OUT') fileParts.push('04OUT26');
+  else fileParts.push('GERAL');
+  const filename = `${fileParts.filter(Boolean).join('_').replace(/__+/g, '_')}.pdf`;
+
+  const rows = filtered.length > 0 ? filtered.map((o) => {
     // Lista todos os crimes assinalados nas 5 perguntas da planilha
     let crimesText = 'Não houve';
     if (o.crimesRegistrados && o.crimesRegistrados.length > 0) {
@@ -544,7 +696,7 @@ export function exportOcorrenciasPdf(
 
     return [
       o.carimbo || '-',
-      o.comandoIntermediario || o.cpa || '-',
+      normalizeCpaName(o.comandoIntermediario || o.cpa || ''),
       o.opm || o.uop || '-',
       crimesText,
       o.local || o.bairro || o.localidade || '-',
@@ -553,7 +705,19 @@ export function exportOcorrenciasPdf(
       o.ro || 'Não informado',
       o.dinamica || o.historico || '-',
     ];
-  });
+  }) : [
+    [
+      '-',
+      cpaFilter !== 'TODOS' ? cpaFilter : '-',
+      opmFilter !== 'TODAS' ? opmFilter : '-',
+      'Nenhum fato ou ocorrência registrado para os filtros selecionados.',
+      '-',
+      '-',
+      '-',
+      '-',
+      'Sem alterações registradas no período/unidade selecionada.',
+    ]
+  ];
 
   autoTable(doc, {
     startY: 23,
@@ -602,21 +766,29 @@ export function exportOcorrenciasPdf(
 
   applyReportHeaderAndFooter(
     doc,
-    `RELATÓRIO DE OCORRÊNCIAS — ${diaLabel}`,
-    `Total de Registros: ${total} • Filtro Carimbo: ${diaLabel}`,
+    `RELATÓRIO DE OCORRÊNCIAS — ${filtroSubtitle}`,
+    `Total de Registros: ${total} • Filtros: ${filtroSubtitle}`,
     'ACOMPANHAMENTO DE INCIDENTES E CRIMES NO PLEITO ELEITORAL'
   );
 
-  doc.save(`RELATORIO_OCORRENCIAS_${fileSuffix}.pdf`);
+  doc.save(filename);
+}
+
+export interface FaltasPdfOptions {
+  dia?: 'TODOS' | '03OUT' | '04OUT' | string;
+  cpa?: string;
+  opm?: string;
+  search?: string;
 }
 
 /**
- * Exporta o Relatório de Faltas de Efetivo com suporte a filtragem estrita pelo Carimbo de Data/Hora (03OUT ou 04OUT)
+ * Exporta o Relatório de Faltas de Efetivo com suporte a filtragem por CPA, OPM e Carimbo de Data/Hora (03OUT ou 04OUT)
  * Inclui totalização por linha enviada e identificação clara dos policiais faltosos
  */
 export function exportFaltasPdf(
   faltas: FaltaEfetivo[],
-  diaFilter: 'TODOS' | '03OUT' | '04OUT' | string = 'TODOS'
+  diaOrOptions: 'TODOS' | '03OUT' | '04OUT' | string | FaltasPdfOptions = 'TODOS',
+  extraOptions?: FaltasPdfOptions
 ) {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -624,12 +796,65 @@ export function exportFaltasPdf(
     format: 'a4',
   });
 
-  // Filtragem estrita focando no Carimbo de Data e Hora se o operador solicitou dia específico
+  let options: FaltasPdfOptions = {};
+  if (typeof diaOrOptions === 'string') {
+    options = { dia: diaOrOptions, ...extraOptions };
+  } else if (typeof diaOrOptions === 'object' && diaOrOptions !== null) {
+    options = { ...diaOrOptions };
+  }
+
+  const diaFilter = options.dia || 'TODOS';
+  const cpaFilter = options.cpa || 'TODOS';
+  const opmFilter = options.opm || 'TODAS';
+  const searchFilter = (options.search || '').trim().toLowerCase();
+
+  // 1. Filtragem por CPA
   let filtered = faltas;
+  if (cpaFilter !== 'TODOS') {
+    filtered = filtered.filter((f) => {
+      const cpaVal = normalizeCpaName(f.comandoIntermediario || f.cpa || '');
+      return cpaVal === cpaFilter;
+    });
+  }
+
+  // 2. Filtragem por OPM
+  if (opmFilter !== 'TODAS') {
+    filtered = filtered.filter((f) => {
+      const opmVal = (f.opm || f.uopDestino || f.opmOrigem || '').trim();
+      return opmVal === opmFilter;
+    });
+  }
+
+  // 3. Filtragem por Dia com foco no Carimbo de Data e Hora
   if (diaFilter === '03OUT' || diaFilter === '04OUT') {
-    filtered = faltas.filter((f) =>
-      matchesCarimboDate(f.carimbo, diaFilter, f.servicoDia || f.turno)
+    filtered = filtered.filter((f) =>
+      matchesCarimboDate(f.carimbo, diaFilter, `${f.servicoDia || ''} ${f.turno || ''}`)
     );
+  }
+
+  // 4. Busca textual ampla
+  if (searchFilter) {
+    filtered = filtered.filter((f) => {
+      const cpaVal = normalizeCpaName(f.comandoIntermediario || f.cpa || '').toLowerCase();
+      const opmVal = (f.opm || f.uopDestino || f.opmOrigem || '').toLowerCase();
+      const carimbo = (f.carimbo || '').toLowerCase();
+      const servico = (f.servicoDia || f.turno || '').toLowerCase();
+      const posto = (f.posto || f.postoGrad || '').toLowerCase();
+      const rg = (f.rg || '').toLowerCase();
+      const nome = (f.nomeGuerra || '').toLowerCase();
+      const faltasTexto = (f.faltasPoe || f.motivo || '').toLowerCase();
+
+      return (
+        carimbo.includes(searchFilter) ||
+        servico.includes(searchFilter) ||
+        posto.includes(searchFilter) ||
+        rg.includes(searchFilter) ||
+        nome.includes(searchFilter) ||
+        cpaVal.includes(searchFilter) ||
+        opmVal.includes(searchFilter) ||
+        faltasTexto.includes(searchFilter)
+      );
+    });
   }
 
   const total = filtered.length;
@@ -641,16 +866,24 @@ export function exportFaltasPdf(
       ? 'DIA 04OUT26 (DOMINGO)'
       : 'GERAL (TODOS OS DIAS)';
 
-  const fileSuffix =
-    diaFilter === '03OUT'
-      ? '03OUT26'
-      : diaFilter === '04OUT'
-      ? '04OUT26'
-      : 'GERAL';
+  // Detalhamento dos filtros para o subtítulo do relatório
+  const filterParts: string[] = [];
+  if (cpaFilter !== 'TODOS') filterParts.push(`Comando: ${cpaFilter}`);
+  if (opmFilter !== 'TODAS') filterParts.push(`OPM: ${opmFilter}`);
+  filterParts.push(`Período: ${diaLabel}`);
+  const filtroSubtitle = filterParts.join(' • ');
+
+  // Nome do arquivo de saída
+  const fileParts = ['RELATORIO_FALTAS'];
+  if (cpaFilter !== 'TODOS') fileParts.push(cpaFilter.replace(/[^A-Za-z0-9]/g, '_'));
+  if (opmFilter !== 'TODAS') fileParts.push(opmFilter.replace(/[^A-Za-z0-9]/g, '_'));
+  if (diaFilter === '03OUT') fileParts.push('03OUT26');
+  else if (diaFilter === '04OUT') fileParts.push('04OUT26');
+  else fileParts.push('GERAL');
+  const filename = `${fileParts.filter(Boolean).join('_').replace(/__+/g, '_')}.pdf`;
 
   // Totalização geral de policiais faltosos do conjunto filtrado
   let totalPoliciaisFaltosos = 0;
-
   filtered.forEach((f) => {
     totalPoliciaisFaltosos += countPoliciaisInText(f.faltasPoe || f.motivo);
   });
@@ -663,17 +896,17 @@ export function exportFaltasPdf(
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 41, 59);
-  doc.text(`TOTALIZAÇÃO DO EFETIVO [${diaLabel}]:`, 14, 27);
+  doc.text(`TOTALIZAÇÃO DO EFETIVO [${filtroSubtitle}]:`, 14, 27);
 
   doc.setFont('helvetica', 'normal');
-  doc.text(`Envios: ${total}`, 95, 27);
+  doc.text(`Envios: ${total}`, 130, 27);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(185, 28, 28);
-  doc.text(`Total Policiais Faltosos: ${totalPoliciaisFaltosos}`, 145, 27);
+  doc.text(`Total Policiais Faltosos: ${totalPoliciaisFaltosos}`, 175, 27);
 
   // Linhas da tabela - Contendo a quantidade de faltas de cada linha enviada
-  const rows = filtered.map((f) => {
+  const rows = filtered.length > 0 ? filtered.map((f) => {
     const qtdFaltasLinha = countPoliciaisInText(f.faltasPoe || f.motivo);
 
     return [
@@ -682,12 +915,24 @@ export function exportFaltasPdf(
       f.posto || f.postoGrad || '-',
       f.rg || '-',
       f.nomeGuerra || '-',
-      f.comandoIntermediario || f.cpa || '-',
+      normalizeCpaName(f.comandoIntermediario || f.cpa || ''),
       f.opm || f.uopDestino || '-',
       `${qtdFaltasLinha} falta(s)`,
       f.faltasPoe || f.motivo || 'sem alteração',
     ];
-  });
+  }) : [
+    [
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      cpaFilter !== 'TODOS' ? cpaFilter : '-',
+      opmFilter !== 'TODAS' ? opmFilter : '-',
+      '0 falta(s)',
+      'Nenhum registro de falta de efetivo para os filtros selecionados.',
+    ]
+  ];
 
   autoTable(doc, {
     startY: 33,
@@ -736,12 +981,12 @@ export function exportFaltasPdf(
 
   applyReportHeaderAndFooter(
     doc,
-    `RELATÓRIO DE FALTAS DE EFETIVO — ${diaLabel}`,
-    `Envios: ${total} • Policiais Faltosos: ${totalPoliciaisFaltosos}`,
+    `RELATÓRIO DE FALTAS DE EFETIVO — ${filtroSubtitle}`,
+    `Envios: ${total} • Policiais Faltosos: ${totalPoliciaisFaltosos} • Filtros: ${filtroSubtitle}`,
     'CONTROLE E REGISTRO OPERACIONAL DE EFETIVO NO POE'
   );
 
-  doc.save(`RELATORIO_FALTAS_${fileSuffix}.pdf`);
+  doc.save(filename);
 }
 
 export const exportImplantacaoDesmobilizacaoPdf = exportLocaisPdf;

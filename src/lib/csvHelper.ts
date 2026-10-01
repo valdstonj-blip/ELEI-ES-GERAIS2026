@@ -10,16 +10,22 @@ import { INITIAL_OCORRENCIAS, INITIAL_FALTAS } from '../data/mockData';
 
 // Link oficial fixo da Planilha Geral Dash passado pelo operador EMG-PM/3
 export const DEFAULT_SHEET_URL =
-  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRwx_S3pGWsXyo7maYjEQEKDK7hCRmouZT4Yp2OCgFfGtPuxrjD2P2P4qEmlqmHNAuFbQUB6awyzPM_/pub?gid=907029771&single=true&output=csv';
+  'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit?gid=907029771#gid=907029771';
+
+export const DEFAULT_OCORRENCIAS_URL =
+  'https://docs.google.com/spreadsheets/d/1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE/edit?gid=2054351637#gid=2054351637';
+
+export const DEFAULT_FALTAS_URL =
+  'https://docs.google.com/spreadsheets/d/1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8/edit?gid=613414577#gid=613414577';
 
 export const SHEET_URLS = {
   PLANILHA_1_LOCAIS: DEFAULT_SHEET_URL,
-  PLANILHA_2_OCORRENCIAS: '',
-  PLANILHA_3_FALTAS: '',
+  PLANILHA_2_OCORRENCIAS: DEFAULT_OCORRENCIAS_URL,
+  PLANILHA_3_FALTAS: DEFAULT_FALTAS_URL,
 };
 
 const STORAGE_KEYS = {
-  LOCAIS: 'eleicoes2026_csv_locais_v6_clean_all_nao',
+  LOCAIS: 'eleicoes2026_csv_locais_v7_faithful_live_sheet',
   OCORRENCIAS: 'eleicoes2026_csv_ocorrencias_v6_clean',
   FALTAS: 'eleicoes2026_csv_faltas_v6_clean',
   LAST_SYNC: 'eleicoes2026_csv_last_sync_v6',
@@ -219,7 +225,7 @@ export const CsvHelper = {
       return SHEET_URLS.PLANILHA_2_OCORRENCIAS.trim();
     }
 
-    return '';
+    return DEFAULT_OCORRENCIAS_URL;
   },
 
   setOcorrenciasSheetUrl(url: string, pushToServer = true) {
@@ -258,7 +264,7 @@ export const CsvHelper = {
       return SHEET_URLS.PLANILHA_3_FALTAS.trim();
     }
 
-    return '';
+    return DEFAULT_FALTAS_URL;
   },
 
   setFaltasSheetUrl(url: string, pushToServer = true) {
@@ -361,9 +367,9 @@ export const CsvHelper = {
       }
     }
 
-    // Se não há dados ou só havia o registro de teste fictício, limpa e retorna vazio
-    this.saveOcorrencias([]);
-    return [];
+    // Se não há dados no cache, inicializa com INITIAL_OCORRENCIAS para cold start imediato
+    this.saveOcorrencias(INITIAL_OCORRENCIAS);
+    return INITIAL_OCORRENCIAS;
   },
 
   saveOcorrencias(data: Ocorrencia[]) {

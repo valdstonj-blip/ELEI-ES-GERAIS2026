@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -16,9 +16,11 @@ const CONFIG_FILE = path.resolve(__dirname, 'sheet-config.json');
 
 const DEFAULT_CONFIG = {
   locaisUrl:
-    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRwx_S3pGWsXyo7maYjEQEKDK7hCRmouZT4Yp2OCgFfGtPuxrjD2P2P4qEmlqmHNAuFbQUB6awyzPM_/pub?gid=907029771&single=true&output=csv',
-  ocorrenciasUrl: '',
-  faltasUrl: '',
+    'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit?gid=907029771#gid=907029771',
+  ocorrenciasUrl:
+    'https://docs.google.com/spreadsheets/d/1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE/edit?gid=2054351637#gid=2054351637',
+  faltasUrl:
+    'https://docs.google.com/spreadsheets/d/1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8/edit?gid=613414577#gid=613414577',
   updatedAt: new Date().toISOString(),
 };
 
@@ -119,8 +121,12 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`EMG-PM/3 Server rodando na porta ${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    console.error('EMG-PM/3 Server error:', err);
   });
 }
 

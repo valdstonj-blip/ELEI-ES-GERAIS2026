@@ -13,10 +13,15 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
+  Copy,
+  Check,
+  Layers,
+  RefreshCw,
 } from 'lucide-react';
 import { LocalVotacao } from '../types';
 import { exportLocaisPdf } from '../services/pdfService';
 import { isSim } from '../services/sheetService';
+import { enrichLocaisWithDuplicates } from '../services/duplicateService';
 
 interface LocaisTabProps {
   locais: LocalVotacao[];
@@ -28,6 +33,8 @@ interface LocaisTabProps {
 export const LocaisTab: React.FC<LocaisTabProps> = ({
   locais,
   onUpdateLocais,
+  onSync,
+  isSyncing = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCpa, setSelectedCpa] = useState('TODOS');
@@ -40,11 +47,29 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
     | 'DOMINGO'
     | 'BLINDADO'
     | 'ALTERACOES'
+    | 'DUPLICIDADES'
   >('TODOS');
 
   const [itemsPerPage, setItemsPerPage] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLocal, setSelectedLocal] = useState<LocalVotacao | null>(null);
+
+  // Modo de visualização de duplicidades: 'AGRUPADO' (tabela detalhada por conflito com linhas) ou 'TABELA' (tabela padrão)
+  const [duplicidadeViewMode, setDuplicidadeViewMode] = useState<'AGRUPADO' | 'TABELA'>('AGRUPADO');
+  const [copiedGroupKey, setCopiedGroupKey] = useState<string | null>(null);
+
+  const handleCopyLines = (key: string, linhas: number[]) => {
+    try {
+      navigator.clipboard.writeText(linhas.join(', '));
+      setCopiedGroupKey(key);
+      setTimeout(() => setCopiedGroupKey(null), 2500);
+    } catch {}
+  };
+
+  // Enriquecer a base com detecção automática de duplicidades e números de linha
+  const { locaisEnriched, duplicateGroups, totalDuplicates } = useMemo(() => {
+    return enrichLocaisWithDuplicates(locais);
+  }, [locais]);
 
   // Normalização padronizada do CPA (1º CPA, 2º CPA, ..., 8º CPA, CPP)
   const normalizeCpaName = (raw: string): string => {
@@ -59,7 +84,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
   // Lista de CPAs: 1º CPA, 2º CPA, ..., 8º CPA, CPP
   const availableCpas = useMemo(() => {
     const set = new Set<string>();
-    locais.forEach((l) => {
+    locaisEnriched.forEach((l) => {
       if (l.cpa) set.add(normalizeCpaName(l.cpa));
     });
     const order = ['1º CPA', '2º CPA', '3º CPA', '4º CPA', '5º CPA', '6º CPA', '7º CPA', '8º CPA', 'CPP'];
@@ -70,26 +95,55 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
       return a.localeCompare(b);
     });
     return ['TODOS', ...sorted];
-  }, [locais]);
+  }, [locaisEnriched]);
 
   // Lista de UOPs em cascata pelo CPA selecionado
   const availableUops = useMemo(() => {
-    let pool = locais;
+    let pool = locaisEnriched;
     if (selectedCpa !== 'TODOS') {
-      pool = locais.filter((l) => normalizeCpaName(l.cpa) === selectedCpa);
+      pool = locaisEnriched.filter((l) => normalizeCpaName(l.cpa) === selectedCpa);
     }
     const set = new Set(pool.map((l) => (l.uop || '').trim()).filter(Boolean));
     return ['TODAS', ...Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
-  }, [locais, selectedCpa]);
+  }, [locaisEnriched, selectedCpa]);
 
   // Base filtrada rigorosamente por CPA e UOP
   const baseLocais = useMemo(() => {
-    return locais.filter((l) => {
+    return locaisEnriched.filter((l) => {
       if (selectedCpa !== 'TODOS' && normalizeCpaName(l.cpa) !== selectedCpa) return false;
       if (selectedUop !== 'TODAS' && (l.uop || '').trim() !== selectedUop) return false;
       return true;
     });
-  }, [locais, selectedCpa, selectedUop]);
+  }, [locaisEnriched, selectedCpa, selectedUop]);
+
+  // Grupos de duplicidades filtrados pelos seletores ativos e busca
+  const filteredDuplicateGroups = useMemo(() => {
+    return duplicateGroups.filter((g) => {
+      if (selectedCpa !== 'TODOS') {
+        const hasCpa = g.locais.some((l) => normalizeCpaName(l.cpa) === selectedCpa);
+        if (!hasCpa) return false;
+      }
+      if (selectedUop !== 'TODAS') {
+        const hasUop = g.locais.some((l) => (l.uop || '').trim() === selectedUop);
+        if (!hasUop) return false;
+      }
+      if (searchTerm) {
+        const q = searchTerm.toLowerCase();
+        const matches = g.locais.some(
+          (l) =>
+            (l.nomeLocal || '').toLowerCase().includes(q) ||
+            (l.endereco || '').toLowerCase().includes(q) ||
+            (l.bairro || '').toLowerCase().includes(q) ||
+            (l.uop || '').toLowerCase().includes(q) ||
+            String(l.numZona || '').includes(q) ||
+            String(l.numLocal || '').includes(q) ||
+            String(l.linhaPlanilha || '').includes(q)
+        );
+        if (!matches && !g.motivo.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [duplicateGroups, selectedCpa, selectedUop, searchTerm]);
 
   // Indicadores diretos que respondem às perguntas solicitadas
   const totalLocais = baseLocais.length;
@@ -132,6 +186,10 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
     return baseLocais.filter(hasObservacao).length;
   }, [baseLocais]);
 
+  const totalDuplicidadesFiltro = useMemo(() => {
+    return baseLocais.filter((l) => l.isDuplicado).length;
+  }, [baseLocais]);
+
   // Acompanhamento do Evento em tempo real (Implantação e Desmobilização)
   const totalImplantadas = useMemo(() => baseLocais.filter((l) => isSim(l.implantada)).length, [baseLocais]);
   const totalNaoImplantadas = totalLocais - totalImplantadas;
@@ -145,11 +203,11 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
 
   // Distribuição rápida por CPA
   const cpaDistribution = useMemo(() => {
-    const map: Record<string, { locais: number; sensiveis: number; blindados: number; domingo: number; imp: number; desmob: number }> = {};
-    locais.forEach((l) => {
+    const map: Record<string, { locais: number; sensiveis: number; blindados: number; domingo: number; imp: number; desmob: number; duplicados: number }> = {};
+    locaisEnriched.forEach((l) => {
       const c = normalizeCpaName(l.cpa);
       if (!map[c]) {
-        map[c] = { locais: 0, sensiveis: 0, blindados: 0, domingo: 0, imp: 0, desmob: 0 };
+        map[c] = { locais: 0, sensiveis: 0, blindados: 0, domingo: 0, imp: 0, desmob: 0, duplicados: 0 };
       }
       map[c].locais++;
       if (isSim(l.areaSensivel)) map[c].sensiveis++;
@@ -157,9 +215,10 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
       if (isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo)) map[c].domingo++;
       if (isSim(l.implantada)) map[c].imp++;
       if (isSim(l.desmobilizada)) map[c].desmob++;
+      if (l.isDuplicado) map[c].duplicados++;
     });
     return map;
-  }, [locais]);
+  }, [locaisEnriched]);
 
   // Dataset final para a tabela
   const filteredLocais = useMemo(() => {
@@ -170,6 +229,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
       if (statusFilter === 'DOMINGO' && !(isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo))) return false;
       if (statusFilter === 'BLINDADO' && !(isSim(l.blindado) || isSim(l.utilizacaoBlindado))) return false;
       if (statusFilter === 'ALTERACOES' && !hasObservacao(l)) return false;
+      if (statusFilter === 'DUPLICIDADES' && !l.isDuplicado) return false;
 
       if (searchTerm) {
         const q = searchTerm.toLowerCase();
@@ -677,15 +737,295 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
             <span>Com Alterações ({totalComObservacoes})</span>
           </button>
+
+          <button
+            onClick={() => {
+              setStatusFilter(statusFilter === 'DUPLICIDADES' ? 'TODOS' : 'DUPLICIDADES');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              statusFilter === 'DUPLICIDADES'
+                ? 'bg-purple-600 text-white shadow-xs ring-2 ring-purple-400'
+                : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-300 font-extrabold'
+            }`}
+          >
+            <Copy className="w-3.5 h-3.5 text-purple-600" />
+            <span>Duplicidades ({totalDuplicidadesFiltro})</span>
+          </button>
         </div>
       </div>
 
+      {/* Painel Completo e Preciso de Auditoria de Duplicidades */}
+      {statusFilter === 'DUPLICIDADES' && (
+        <div className="space-y-3">
+          {/* 1. Barra de Indicadores de Duplicidades */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="bg-purple-900 text-white p-3 rounded-xl shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-purple-200 block">Total de Conflitos</span>
+              <span className="text-xl font-black">{filteredDuplicateGroups.length}</span>
+              <span className="text-[10px] text-purple-300 block">grupos duplicados</span>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-purple-800 block">Linhas no Sheets</span>
+              <span className="text-xl font-black text-purple-950">
+                {Array.from(new Set(filteredDuplicateGroups.flatMap((g) => g.linhas))).length}
+              </span>
+              <span className="text-[10px] text-purple-600 block">linhas afetadas</span>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-rose-800 block">CPA Cruzado</span>
+              <span className="text-xl font-black text-rose-900">
+                {filteredDuplicateGroups.filter((g) => g.tipo === 'CPA').length}
+              </span>
+              <span className="text-[10px] text-rose-600 block">entre CPAs distintos</span>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-amber-800 block">Entre Batalhões</span>
+              <span className="text-xl font-black text-amber-900">
+                {filteredDuplicateGroups.filter((g) => g.tipo === 'UOP').length}
+              </span>
+              <span className="text-[10px] text-amber-600 block">mesmo CPA / vizinhos</span>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-blue-800 block">Internas da Unidade</span>
+              <span className="text-xl font-black text-blue-900">
+                {filteredDuplicateGroups.filter((g) => g.tipo === 'INTERNA').length}
+              </span>
+              <span className="text-[10px] text-blue-600 block">repetidas na mesma OPM</span>
+            </div>
+
+            <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-xs flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Sincronização</span>
+              <button
+                onClick={() => onSync && onSync()}
+                disabled={isSyncing}
+                className="w-full mt-1 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                title="Recarregar dados diretamente do Google Sheets"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Sincronizando...' : 'Recarregar Sheets'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Barra de Controle e Instruções */}
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-start gap-2">
+              <Copy className="w-4 h-4 text-purple-600 mt-0.5 shrink-0" />
+              <div>
+                <span className="font-extrabold text-purple-950 text-xs block">
+                  Auditoria de Exatidão das Linhas da Planilha Google Sheets
+                </span>
+                <p className="text-[11px] text-purple-800 leading-snug">
+                  As linhas informadas abaixo (ex: <strong>Linha 44, Linha 45, Linha 3648</strong>) batem <strong>100%</strong> com o número da linha física no Google Sheets oficial. Utilize o botão <em>Copiar Linhas</em> para localizar e corrigir instantaneamente.
+                </p>
+              </div>
+            </div>
+
+            {/* Alternador de Modo de Visualização */}
+            <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-purple-300 shrink-0 text-xs font-bold">
+              <button
+                onClick={() => setDuplicidadeViewMode('AGRUPADO')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all cursor-pointer ${
+                  duplicidadeViewMode === 'AGRUPADO'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-purple-800 hover:bg-purple-50'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Agrupado por Conflito</span>
+              </button>
+
+              <button
+                onClick={() => setDuplicidadeViewMode('TABELA')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all cursor-pointer ${
+                  duplicidadeViewMode === 'TABELA'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-purple-800 hover:bg-purple-50'
+                }`}
+              >
+                <Building className="w-3.5 h-3.5" />
+                <span>Tabela Geral Filtrada</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Tabela Agrupada de Conflitos Lado a Lado (Exatidão Máxima) */}
+          {duplicidadeViewMode === 'AGRUPADO' && (
+            <div className="space-y-3">
+              {filteredDuplicateGroups.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs">
+                  Nenhum conflito de duplicidade encontrado com os filtros selecionados.
+                </div>
+              ) : (
+                filteredDuplicateGroups.map((group, gIdx) => {
+                  const isCopied = copiedGroupKey === group.id;
+                  const badgeColor =
+                    group.tipo === 'CPA'
+                      ? 'bg-rose-100 text-rose-800 border-rose-300'
+                      : group.tipo === 'UOP'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-blue-100 text-blue-800 border-blue-300';
+                  const badgeLabel =
+                    group.tipo === 'CPA'
+                      ? 'Conflito Entre CPAs Distintos'
+                      : group.tipo === 'UOP'
+                      ? 'Conflito Entre Batalhões Vizinhos'
+                      : 'Duplicidade Interna de Registro';
+
+                  return (
+                    <div
+                      key={group.id || `group-${gIdx}`}
+                      className="bg-white border border-purple-200 rounded-xl overflow-hidden shadow-xs"
+                    >
+                      {/* Cabeçalho do Conflito */}
+                      <div className="bg-slate-900 text-white p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${badgeColor}`}>
+                            {badgeLabel}
+                          </span>
+                          <span className="text-xs font-bold text-purple-200">
+                            {group.motivo}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">Linhas no Sheets:</span>
+                            {group.linhas.map((ln) => (
+                              <span
+                                key={ln}
+                                className="px-2 py-0.5 rounded font-mono font-black text-xs bg-purple-600 text-white shadow-2xs"
+                              >
+                                Linha {ln}
+                              </span>
+                            ))}
+                          </div>
+
+                          <button
+                            onClick={() => handleCopyLines(group.id, group.linhas)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 transition-colors cursor-pointer border border-slate-700"
+                            title="Copiar números das linhas para a área de transferência"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <span className="text-emerald-400">Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5 text-slate-300" />
+                                <span>Copiar Linhas</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tabela Comparativa das Linhas Conflitantes */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs text-slate-700">
+                          <thead className="bg-purple-50/70 text-purple-950 uppercase text-[10px] font-black tracking-wider border-b border-purple-200">
+                            <tr>
+                              <th className="py-2 px-3 text-center whitespace-nowrap bg-purple-100">LINHA SHEETS</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap">CPA</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap">UOP</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap">ZONA</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap">LOCAL TSE</th>
+                              <th className="py-2 px-3 min-w-[200px]">NOME DO LOCAL DE VOTAÇÃO</th>
+                              <th className="py-2 px-3 min-w-[200px]">ENDEREÇO</th>
+                              <th className="py-2 px-2 whitespace-nowrap">BAIRRO / MUNICÍPIO</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap">APTOS</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap">URNA IMPLANTADA</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap">DESMOBILIZAÇÃO</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-purple-100 bg-white">
+                            {group.locais.map((loc, lIdx) => (
+                              <tr
+                                key={loc.id || `loc-row-${lIdx}`}
+                                onClick={() => setSelectedLocal(loc)}
+                                className="hover:bg-purple-50/50 transition-colors cursor-pointer"
+                              >
+                                <td className="py-2.5 px-3 text-center bg-purple-50/40">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded font-mono font-black text-xs bg-purple-200 text-purple-950 border border-purple-300">
+                                    Linha {loc.linhaPlanilha}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-2 text-center font-bold text-slate-900 whitespace-nowrap">
+                                  {normalizeCpaName(loc.cpa)}
+                                </td>
+                                <td className="py-2.5 px-2 text-center font-black text-slate-900 whitespace-nowrap">
+                                  {loc.uop}
+                                </td>
+                                <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-800">
+                                  {loc.numZona || loc.zonaEleitoral}
+                                </td>
+                                <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-800">
+                                  {loc.numLocal}
+                                </td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-900">
+                                  {loc.nomeLocal || loc.local}
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-700">
+                                  {loc.endereco}
+                                </td>
+                                <td className="py-2.5 px-2 text-slate-600 whitespace-nowrap">
+                                  {loc.bairro || '-'} • {loc.municipio || 'RIO DE JANEIRO'}
+                                </td>
+                                <td className="py-2.5 px-2 text-center font-mono text-slate-700">
+                                  {(loc.qtdAptos || loc.totalEleitoresAptos || 0).toLocaleString('pt-BR')}
+                                </td>
+                                <td className="py-2.5 px-2 text-center">
+                                  {isSim(loc.implantada) ? (
+                                    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      SIM
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">
+                                      NÃO
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-2 text-center">
+                                  {isSim(loc.desmobilizada) ? (
+                                    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                      <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                                      SIM
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">
+                                      NÃO
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 5. TABELA DE DADOS INTEGRAL (EXATAMENTE NA ORDEM DA PLANILHA) */}
+      {(statusFilter !== 'DUPLICIDADES' || duplicidadeViewMode === 'TABELA') && (
       <div className="bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider">
               <tr>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">LINHA</th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap">NUM_ZONA</th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap">QTD_APTOS</th>
                 <th className="py-2.5 px-2 whitespace-nowrap">NOM_MUNICIPIO</th>
@@ -706,7 +1046,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
             <tbody className="divide-y divide-slate-100">
               {paginatedLocais.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-slate-400">
+                  <td colSpan={15} className="py-12 text-center text-slate-400">
                     Nenhum local de votação encontrado com os critérios aplicados.
                   </td>
                 </tr>
@@ -719,6 +1059,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                   const isDomingo = loc.implantacaoDomingo || loc.necessidadeImplantacaoDomingo;
                   const isBlindado = loc.blindado || loc.utilizacaoBlindado;
                   const hasAlt = hasObservacao(loc);
+                  const isDup = loc.isDuplicado;
                   const obsTexto = (loc.observacoes || loc.observacao || '').trim();
 
                   return (
@@ -726,11 +1067,31 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                       key={loc.id || `loc-${idx}`}
                       onClick={() => setSelectedLocal(loc)}
                       className={`transition-colors cursor-pointer ${
-                        hasAlt
+                        isDup
+                          ? 'bg-purple-50/70 hover:bg-purple-100/70 border-l-4 border-l-purple-500 font-medium'
+                          : hasAlt
                           ? 'bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-amber-500 font-medium'
                           : (idx % 2 === 1 ? 'bg-slate-50/30 hover:bg-slate-50/80' : 'bg-white hover:bg-slate-50/80')
                       }`}
                     >
+                      {/* 0. LINHA NA PLANILHA */}
+                      <td className="py-2.5 px-2 text-center font-mono text-[10px]">
+                        {loc.linhaPlanilha ? (
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-bold ${
+                              isDup
+                                ? 'bg-purple-200 text-purple-900 border border-purple-300'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                            title={`Linha física ${loc.linhaPlanilha} na planilha do Google Sheets`}
+                          >
+                            L.{loc.linhaPlanilha}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+
                       {/* 1. NUM_ZONA */}
                       <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900">
                         {zona}
@@ -760,19 +1121,38 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
 
                       {/* 6. NOM_LOCAL */}
                       <td className="py-2.5 px-3 font-semibold text-slate-900">
-                        <div className="flex items-center gap-1.5">
-                          {hasAlt && (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {hasAlt && (
+                              <span
+                                title="Local com alterações registradas"
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-500 text-white uppercase shrink-0 shadow-2xs"
+                              >
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                                <span>ALT</span>
+                              </span>
+                            )}
+                            {isDup && (
+                              <span
+                                title={loc.duplicidadeMotivo}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-600 text-white uppercase shrink-0 shadow-2xs"
+                              >
+                                <Copy className="w-2.5 h-2.5" />
+                                <span>DUP</span>
+                              </span>
+                            )}
+                            <span className="line-clamp-1" title={nome}>
+                              {nome}
+                            </span>
+                          </div>
+                          {isDup && (
                             <span
-                              title="Local com alterações registradas"
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-500 text-white uppercase shrink-0 shadow-2xs"
+                              className="text-[10px] text-purple-700 font-medium line-clamp-1"
+                              title={loc.duplicidadeMotivo}
                             >
-                              <AlertTriangle className="w-2.5 h-2.5" />
-                              <span>ALT</span>
+                              ⚠️ {loc.duplicidadeMotivo}
                             </span>
                           )}
-                          <span className="line-clamp-1" title={nome}>
-                            {nome}
-                          </span>
                         </div>
                       </td>
 
@@ -928,6 +1308,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* Modal de Detalhes do Local de Votação */}
       {selectedLocal && (
@@ -974,6 +1355,31 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                 </p>
               </div>
             </div>
+
+            {/* Alerta de Duplicidade no Modal */}
+            {selectedLocal.isDuplicado && (
+              <div className="p-3.5 bg-purple-50 rounded-xl border border-purple-300 text-xs space-y-1.5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-purple-900 font-extrabold uppercase text-[11px]">
+                    <Copy className="w-4 h-4 text-purple-600" />
+                    <span>Alerta de Duplicidade / Conflito Territorial</span>
+                  </div>
+                  {selectedLocal.linhaPlanilha && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-200 text-purple-900">
+                      Linha {selectedLocal.linhaPlanilha} na Planilha
+                    </span>
+                  )}
+                </div>
+                <div className="p-3 bg-white/90 rounded-lg border border-purple-200 text-purple-950 font-medium text-xs leading-relaxed space-y-1">
+                  <p className="font-bold text-slate-900">{selectedLocal.duplicidadeMotivo}</p>
+                  {selectedLocal.duplicidadeLinhas && selectedLocal.duplicidadeLinhas.length > 0 && (
+                    <p className="text-[11px] text-purple-700">
+                      Linha(s) conflitante(s) no Google Sheets: <strong>Linha(s) {selectedLocal.duplicidadeLinhas.join(', ')}</strong>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {hasObservacao(selectedLocal) && (
               <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-300 text-xs space-y-1.5">
