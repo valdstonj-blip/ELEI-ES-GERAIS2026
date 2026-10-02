@@ -56,6 +56,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
 
   // Modo de visualização de duplicidades: 'AGRUPADO' (tabela detalhada por conflito com linhas) ou 'TABELA' (tabela padrão)
   const [duplicidadeViewMode, setDuplicidadeViewMode] = useState<'AGRUPADO' | 'TABELA'>('AGRUPADO');
+  const [duplicidadeTypeFilter, setDuplicidadeTypeFilter] = useState<'TODOS' | 'CPA' | 'UOP' | 'INTERNA'>('TODOS');
   const [copiedGroupKey, setCopiedGroupKey] = useState<string | null>(null);
 
   const handleCopyLines = (key: string, linhas: number[]) => {
@@ -119,6 +120,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
   // Grupos de duplicidades filtrados pelos seletores ativos e busca
   const filteredDuplicateGroups = useMemo(() => {
     return duplicateGroups.filter((g) => {
+      if (duplicidadeTypeFilter !== 'TODOS' && g.tipo !== duplicidadeTypeFilter) return false;
       if (selectedCpa !== 'TODOS') {
         const hasCpa = g.locais.some((l) => normalizeCpaName(l.cpa) === selectedCpa);
         if (!hasCpa) return false;
@@ -143,7 +145,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
       }
       return true;
     });
-  }, [duplicateGroups, selectedCpa, selectedUop, searchTerm]);
+  }, [duplicateGroups, duplicidadeTypeFilter, selectedCpa, selectedUop, searchTerm]);
 
   // Indicadores diretos que respondem às perguntas solicitadas
   const totalLocais = baseLocais.length;
@@ -758,13 +760,20 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
       {/* Painel Completo e Preciso de Auditoria de Duplicidades */}
       {statusFilter === 'DUPLICIDADES' && (
         <div className="space-y-3">
-          {/* 1. Barra de Indicadores de Duplicidades */}
+          {/* 1. Barra de Indicadores e Filtros Rápidos de Duplicidades */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            <div className="bg-purple-900 text-white p-3 rounded-xl shadow-xs">
+            <button
+              onClick={() => setDuplicidadeTypeFilter('TODOS')}
+              className={`p-3 rounded-xl shadow-xs text-left transition-all cursor-pointer ${
+                duplicidadeTypeFilter === 'TODOS'
+                  ? 'bg-purple-900 text-white ring-2 ring-purple-400'
+                  : 'bg-purple-800 text-white hover:bg-purple-900'
+              }`}
+            >
               <span className="text-[10px] uppercase font-bold text-purple-200 block">Total de Conflitos</span>
               <span className="text-xl font-black">{filteredDuplicateGroups.length}</span>
               <span className="text-[10px] text-purple-300 block">grupos duplicados</span>
-            </div>
+            </button>
 
             <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl shadow-xs">
               <span className="text-[10px] uppercase font-bold text-purple-800 block">Linhas no Sheets</span>
@@ -774,29 +783,50 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
               <span className="text-[10px] text-purple-600 block">linhas afetadas</span>
             </div>
 
-            <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl shadow-xs">
+            <button
+              onClick={() => setDuplicidadeTypeFilter(duplicidadeTypeFilter === 'CPA' ? 'TODOS' : 'CPA')}
+              className={`border p-3 rounded-xl shadow-xs text-left transition-all cursor-pointer ${
+                duplicidadeTypeFilter === 'CPA'
+                  ? 'bg-rose-100 border-rose-500 ring-2 ring-rose-400 text-rose-950 font-bold'
+                  : 'bg-rose-50 border-rose-200 hover:bg-rose-100/70 text-rose-900'
+              }`}
+            >
               <span className="text-[10px] uppercase font-bold text-rose-800 block">CPA Cruzado</span>
               <span className="text-xl font-black text-rose-900">
-                {filteredDuplicateGroups.filter((g) => g.tipo === 'CPA').length}
+                {duplicateGroups.filter((g) => g.tipo === 'CPA').length}
               </span>
               <span className="text-[10px] text-rose-600 block">entre CPAs distintos</span>
-            </div>
+            </button>
 
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl shadow-xs">
+            <button
+              onClick={() => setDuplicidadeTypeFilter(duplicidadeTypeFilter === 'UOP' ? 'TODOS' : 'UOP')}
+              className={`border p-3 rounded-xl shadow-xs text-left transition-all cursor-pointer ${
+                duplicidadeTypeFilter === 'UOP'
+                  ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-400 text-amber-950 font-bold'
+                  : 'bg-amber-50 border-amber-200 hover:bg-amber-100/70 text-amber-900'
+              }`}
+            >
               <span className="text-[10px] uppercase font-bold text-amber-800 block">Entre Batalhões</span>
               <span className="text-xl font-black text-amber-900">
-                {filteredDuplicateGroups.filter((g) => g.tipo === 'UOP').length}
+                {duplicateGroups.filter((g) => g.tipo === 'UOP').length}
               </span>
               <span className="text-[10px] text-amber-600 block">mesmo CPA / vizinhos</span>
-            </div>
+            </button>
 
-            <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl shadow-xs">
+            <button
+              onClick={() => setDuplicidadeTypeFilter(duplicidadeTypeFilter === 'INTERNA' ? 'TODOS' : 'INTERNA')}
+              className={`border p-3 rounded-xl shadow-xs text-left transition-all cursor-pointer ${
+                duplicidadeTypeFilter === 'INTERNA'
+                  ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-400 text-blue-950 font-bold'
+                  : 'bg-blue-50 border-blue-200 hover:bg-blue-100/70 text-blue-900'
+              }`}
+            >
               <span className="text-[10px] uppercase font-bold text-blue-800 block">Internas da Unidade</span>
               <span className="text-xl font-black text-blue-900">
-                {filteredDuplicateGroups.filter((g) => g.tipo === 'INTERNA').length}
+                {duplicateGroups.filter((g) => g.tipo === 'INTERNA').length}
               </span>
               <span className="text-[10px] text-blue-600 block">repetidas na mesma OPM</span>
-            </div>
+            </button>
 
             <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-xs flex flex-col justify-between">
               <span className="text-[10px] uppercase font-bold text-slate-500 block">Sincronização</span>
@@ -854,14 +884,30 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
             </div>
           </div>
 
-          {/* 3. Tabela Agrupada de Conflitos Lado a Lado (Exatidão Máxima) */}
+          {/* 3. Tabela Agrupada de Conflitos Lado a Lado (Exatidão Máxima) com Barra de Rolagem Vertical e Horizontal */}
           {duplicidadeViewMode === 'AGRUPADO' && (
-            <div className="space-y-3">
-              {filteredDuplicateGroups.length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs">
-                  Nenhum conflito de duplicidade encontrado com os filtros selecionados.
-                </div>
-              ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-purple-900 px-1">
+                <span>
+                  Exibindo <strong>{filteredDuplicateGroups.length}</strong> grupo(s) de conflito
+                  {duplicidadeTypeFilter !== 'TODOS' && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded bg-purple-200 text-purple-900 font-bold text-[10px]">
+                      {duplicidadeTypeFilter === 'CPA' ? 'CPA Cruzado' : duplicidadeTypeFilter === 'UOP' ? 'Entre Batalhões' : 'Internas da Unidade'}
+                    </span>
+                  )}
+                </span>
+                <span className="text-slate-500 text-[10px] hidden sm:inline">
+                  ↕ Use a barra de rolagem vertical para navegar entre os conflitos
+                </span>
+              </div>
+
+              {/* Contêiner delimitado com barra de rolagem vertical (evita expansão infinita da página) */}
+              <div className="space-y-3 max-h-[580px] overflow-y-auto overflow-x-hidden pr-1.5 rounded-xl border border-purple-200 bg-purple-50/20 p-2 shadow-inner">
+                {filteredDuplicateGroups.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs">
+                    Nenhum conflito de duplicidade encontrado com os filtros selecionados.
+                  </div>
+                ) : (
                 filteredDuplicateGroups.map((group, gIdx) => {
                   const isCopied = copiedGroupKey === group.id;
                   const badgeColor =
@@ -1013,33 +1059,34 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                   );
                 })
               )}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* 5. TABELA DE DADOS INTEGRAL (EXATAMENTE NA ORDEM DA PLANILHA) */}
+      {/* 5. TABELA DE DADOS INTEGRAL (EXATAMENTE NA ORDEM DA PLANILHA) COM BARRAS DE ROLAGEM VERTICAL E HORIZONTAL */}
       {(statusFilter !== 'DUPLICIDADES' || duplicidadeViewMode === 'TABELA') && (
       <div className="bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider">
+        <div className="overflow-x-auto overflow-y-auto max-h-[580px]">
+          <table className="w-full text-left text-xs text-slate-700 min-w-[1400px]">
+            <thead className="sticky top-0 z-10 bg-slate-900 text-white uppercase text-[10px] font-bold tracking-wider shadow-xs">
               <tr>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">LINHA</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">NUM_ZONA</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">QTD_APTOS</th>
-                <th className="py-2.5 px-2 whitespace-nowrap">NOM_MUNICIPIO</th>
-                <th className="py-2.5 px-2 whitespace-nowrap">NOM_BAIRRO</th>
-                <th className="py-2.5 px-3 min-w-[200px]">ENDERECO_LOCAL</th>
-                <th className="py-2.5 px-3 min-w-[220px]">NOM_LOCAL</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">CPA</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">UOP</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">ÁREA SENSIVEL (SIM/NÃO)</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">NECESSIDADE DE IMPLANTAÇÃO DA URNA NO DOMINGO</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA(SIM/NÃO)</th>
-                <th className="py-2.5 px-2 min-w-[150px]">OBSERVAÇÕS E ALTERAÇÕES</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-emerald-900/60">URNA IMPLANTADA</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-blue-900/60">DESMOBILIZAÇÃO.</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">NUM_ZONA</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">QTD_APTOS</th>
+                <th className="py-2.5 px-2 whitespace-nowrap bg-slate-900">NOM_MUNICIPIO</th>
+                <th className="py-2.5 px-2 whitespace-nowrap bg-slate-900">NOM_BAIRRO</th>
+                <th className="py-2.5 px-3 min-w-[200px] bg-slate-900">ENDERECO_LOCAL</th>
+                <th className="py-2.5 px-3 min-w-[220px] bg-slate-900">NOM_LOCAL</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">CPA</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">UOP</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">ÁREA SENSIVEL (SIM/NÃO)</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">NECESSIDADE DE IMPLANTAÇÃO DA URNA NO DOMINGO</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA(SIM/NÃO)</th>
+                <th className="py-2.5 px-2 min-w-[150px] bg-slate-900">OBSERVAÇÕS E ALTERAÇÕES</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-emerald-950">URNA IMPLANTADA</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-blue-950">DESMOBILIZAÇÃO.</th>
               </tr>
             </thead>
 
