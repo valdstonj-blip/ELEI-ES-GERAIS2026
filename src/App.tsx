@@ -257,8 +257,8 @@ export default function App() {
         }}
       />
 
-      {/* Corpo da Aplicação */}
-      <main className="max-w-7xl mx-auto px-4 py-4 flex-1 w-full">
+      {/* Corpo da Aplicação Responsivo */}
+      <main className="max-w-7xl mx-auto px-2.5 sm:px-4 py-3 sm:py-4 flex-1 w-full">
         {activeTab === 'locais' && (
           <LocaisTab
             locais={locais}

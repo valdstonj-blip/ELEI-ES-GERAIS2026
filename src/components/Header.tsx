@@ -59,11 +59,11 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Abas Principais em estilo refinado */}
-        <nav className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+        {/* Abas Principais em estilo refinado com rolagem horizontal fluida no celular */}
+        <nav className="flex items-center gap-1.5 overflow-x-auto py-0.5 w-full md:w-auto scrollbar-none">
           <button
             onClick={() => setActiveTab('locais')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'locais'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -84,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setActiveTab('ocorrencias')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'ocorrencias'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -105,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setActiveTab('faltas')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'faltas'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -125,13 +125,13 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Ações Diretas: Sincronizar, Conectar e Sair */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Ações Diretas: Sincronizar, Conectar e Sair responsivo */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 w-full md:w-auto shrink-0">
           <button
             onClick={onManualSync}
             disabled={isSyncing}
             title={lastSyncTime ? `Última sincronização: ${lastSyncTime}` : 'Sincronizar com Planilhas Google'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors cursor-pointer disabled:opacity-60 shadow-2xs"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors cursor-pointer disabled:opacity-60 shadow-2xs whitespace-nowrap"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Atualizando...' : 'Sincronizar'}</span>
@@ -141,10 +141,11 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenSettings}
               title="Configurar Links das Planilhas"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer whitespace-nowrap"
             >
               <Link2 className="w-3.5 h-3.5 text-slate-400" />
-              <span>Conectar Planilhas</span>
+              <span className="hidden sm:inline">Conectar Planilhas</span>
+              <span className="sm:hidden">Planilhas</span>
             </button>
           )}
 
