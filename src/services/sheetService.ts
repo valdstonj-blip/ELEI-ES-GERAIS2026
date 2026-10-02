@@ -23,17 +23,24 @@ export const isSim = (val: any): boolean => {
   if (val === null || val === undefined) return false;
   if (typeof val === 'boolean') return val;
   const s = String(val).trim().toUpperCase();
-  // Conforme determinação operacional: X / x NÃO é considerado SIM (indica dúvida/em análise)
+  // Conforme determinação operacional: valores negativos
+  if (s === 'N' || s === 'NÃO' || s === 'NAO' || s === 'FALSE' || s === '0' || s === '-' || s === 'X,X,X,X,X') return false;
+  const clean = s.replace(/[^A-Z0-9]/g, '');
   return (
-    s === 'SIM' ||
-    s === 'S' ||
-    s === 'TRUE' ||
-    s === '1' ||
-    s === 'OK' ||
-    s === 'IMPLANTADA' ||
-    s === 'IMPLANTADO' ||
-    s === 'DESMOBILIZADA' ||
-    s === 'DESMOBILIZADO' ||
+    clean === 'SIM' ||
+    clean === 'S' ||
+    clean === 'TRUE' ||
+    clean === '1' ||
+    clean === 'OK' ||
+    clean === 'X' ||
+    clean === 'IMPLANTADA' ||
+    clean === 'IMPLANTADO' ||
+    clean === 'DESMOBILIZADA' ||
+    clean === 'DESMOBILIZADO' ||
+    clean === 'CONCLUIDO' ||
+    clean === 'CONCLUIDA' ||
+    clean === 'REALIZADA' ||
+    clean === 'REALIZADO' ||
     s.startsWith('SIM')
   );
 };
@@ -132,15 +139,19 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
 
         // NUNCA confundir com colunas de blindado, domingo ou necessidade de planejamento
         if (norm.includes('DOMINGO') || norm.includes('NECESSIDADE') || norm.includes('BLINDADO')) return false;
-        if (norm.includes('DESMOBILIZ') || norm.includes('DESMOB')) return false;
+        if (norm.includes('DESMOBILIZ') || norm.includes('DESMOB') || norm.includes('RECOLHI')) return false;
 
         return (
           (norm.includes('URNA') && norm.includes('IMPLANT')) ||
           (norm.includes('URNAS') && norm.includes('IMPLANT')) ||
           norm.includes('IMPLANTADA') ||
           norm.includes('IMPLANTADO') ||
-          norm.includes('IMPLANTACAO REALIZADA') ||
-          norm.includes('LOCAL IMPLANT')
+          norm.includes('IMPLANTACAO') ||
+          norm.includes('LOCAL IMPLANT') ||
+          norm.includes('STATUS IMPLANT') ||
+          norm.includes('ENTREGA DA URNA') ||
+          norm.includes('URNA ENTREGUE') ||
+          norm.includes('URNA NO LOCAL')
         );
       });
 
@@ -154,7 +165,13 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
           .replace(/\s+/g, ' ')
           .trim();
 
-        return norm.includes('DESMOBILIZ') || norm.includes('DESMOB');
+        return (
+          norm.includes('DESMOBILIZ') ||
+          norm.includes('DESMOB') ||
+          norm.includes('RECOLHIMENTO') ||
+          norm.includes('RECOLHIDA') ||
+          norm.includes('RETIRADA DA URNA')
+        );
       });
 
       let implantadaRaw = keyImplantada ? row[keyImplantada] : (row['URNA IMPLANTADA'] || row['URNA IMPLANTADA NO LOCAL DE VOTAÇÃO'] || row['IMPLANTAÇÃO REALIZADA (SIM / NÃO)'] || row['IMPLANTADA']);
@@ -853,10 +870,22 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
   const { primary, fallbacks } = normalizeGoogleSheetsUrl(url);
   const candidates = [primary, ...fallbacks].filter(Boolean);
 
+  let hadLoginRedirect = false;
+
   const isValidCsv = (text: string) => {
     if (!text || text.trim().length < 50) return false;
     const lower = text.toLowerCase().trim();
-    if (lower.startsWith('<!doctype') || lower.startsWith('<html') || lower.includes('google doc error') || lower.includes('page not found')) {
+    if (
+      lower.includes('accounts.google.com') ||
+      lower.includes('servicelogin') ||
+      lower.includes('google doc error') ||
+      lower.includes('fazer login') ||
+      lower.includes('sign in - google accounts')
+    ) {
+      hadLoginRedirect = true;
+      return false;
+    }
+    if (lower.startsWith('<!doctype') || lower.startsWith('<html') || lower.includes('page not found')) {
       return false;
     }
     return text.includes(',') || text.includes(';') || text.includes('\t');
@@ -955,6 +984,10 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
     } catch {
       // Ignorar e tentar próximo
     }
+  }
+
+  if (hadLoginRedirect) {
+    throw new Error('GOOGLE_SHEETS_RESTRICTED: Acesso Restrito no Google Drive. No Google Sheets, clique em Compartilhar e marque "Qualquer pessoa com o link" (Leitor).');
   }
 
   throw new Error('Não foi possível ler os dados da planilha Google Sheets. Verifique se o link está acessível ou publicado na web.');

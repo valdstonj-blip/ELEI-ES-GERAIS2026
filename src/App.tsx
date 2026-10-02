@@ -85,7 +85,9 @@ export default function App() {
         } catch (err: any) {
           console.warn('Aviso sincronização remota locais:', err);
           if (err?.message?.includes('404')) {
-            errorMessage = 'O link de Locais retornou Erro 404 no Google. Verifique o link em "Conectar Planilhas".';
+            errorMessage = 'O link de Locais retornou Erro 404 no Google.';
+          } else if (err?.message?.includes('Restrito') || err?.message?.includes('login') || err?.message?.includes('HTML')) {
+            errorMessage = 'Planilha de Locais com acesso restrito no Google Drive. No Google Sheets, marque "Qualquer pessoa com o link" (Leitor).';
           }
         }
       })();
@@ -155,6 +157,14 @@ export default function App() {
   // Sincronização inicial automática dos links e bases ao abrir em qualquer dispositivo ou navegador
   useEffect(() => {
     let isMounted = true;
+
+    // 1. Carrega dados persistidos do servidor central (computadores e celulares)
+    CsvHelper.fetchServerLocais().then((serverLocais) => {
+      if (isMounted && serverLocais && serverLocais.length > 0) {
+        setLocais(serverLocais);
+      }
+    });
+
     CsvHelper.initAndSyncUrls().then((urls) => {
       if (isMounted) {
         console.log('[EMG-PM/3] Links permanentes inicializados com sucesso:', urls);

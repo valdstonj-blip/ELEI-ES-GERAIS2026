@@ -17,10 +17,15 @@ import {
   Check,
   Layers,
   RefreshCw,
+  ChevronDown,
+  Upload,
+  CalendarCheck,
+  CheckSquare,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { LocalVotacao } from '../types';
 import { exportLocaisPdf } from '../services/pdfService';
-import { isSim } from '../services/sheetService';
+import { isSim, parseLocaisCsv } from '../services/sheetService';
 import { enrichLocaisWithDuplicates } from '../services/duplicateService';
 
 interface LocaisTabProps {
@@ -29,6 +34,24 @@ interface LocaisTabProps {
   onSync?: () => void;
   isSyncing?: boolean;
 }
+
+export type LocaisStatusFilter =
+  | 'TODOS'
+  | 'SABADO_TODOS'
+  | 'SABADO_IMPLANTADAS'
+  | 'SABADO_PENDENTES'
+  | 'DOMINGO_TODOS'
+  | 'DOMINGO_IMPLANTADAS'
+  | 'DOMINGO_PENDENTES'
+  | 'IMPLANTADAS'
+  | 'NAO_IMPLANTADAS'
+  | 'DESMOBILIZADAS'
+  | 'NAO_DESMOBILIZADAS'
+  | 'SENSIVEIS'
+  | 'DOMINGO'
+  | 'BLINDADO'
+  | 'ALTERACOES'
+  | 'DUPLICIDADES';
 
 export const LocaisTab: React.FC<LocaisTabProps> = ({
   locais,
@@ -39,25 +62,23 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCpa, setSelectedCpa] = useState('TODOS');
   const [selectedUop, setSelectedUop] = useState('TODAS');
-  const [statusFilter, setStatusFilter] = useState<
-    | 'TODOS'
-    | 'IMPLANTADAS'
-    | 'DESMOBILIZADAS'
-    | 'SENSIVEIS'
-    | 'DOMINGO'
-    | 'BLINDADO'
-    | 'ALTERACOES'
-    | 'DUPLICIDADES'
-  >('TODOS');
+  const [statusFilter, setStatusFilter] = useState<LocaisStatusFilter>('TODOS');
 
   const [itemsPerPage, setItemsPerPage] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLocal, setSelectedLocal] = useState<LocalVotacao | null>(null);
 
+  // Modal para colar ou importar CSV do Google Sheets
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [csvInputText, setCsvInputText] = useState('');
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [batchActionMsg, setBatchActionMsg] = useState<string | null>(null);
+
   // Modo de visualização de duplicidades: 'AGRUPADO' (tabela detalhada por conflito com linhas) ou 'TABELA' (tabela padrão)
   const [duplicidadeViewMode, setDuplicidadeViewMode] = useState<'AGRUPADO' | 'TABELA'>('AGRUPADO');
   const [duplicidadeTypeFilter, setDuplicidadeTypeFilter] = useState<'TODOS' | 'CPA' | 'UOP' | 'INTERNA'>('TODOS');
   const [copiedGroupKey, setCopiedGroupKey] = useState<string | null>(null);
+  const [pdfDropdownOpen, setPdfDropdownOpen] = useState(false);
 
   const handleCopyLines = (key: string, linhas: number[]) => {
     try {
@@ -192,7 +213,25 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
     return baseLocais.filter((l) => l.isDuplicado).length;
   }, [baseLocais]);
 
-  // Acompanhamento do Evento em tempo real (Implantação e Desmobilização)
+  // 1. Acompanhamento Operacional de SÁBADO (03/OUT - Véspera / Sem necessidade no domingo)
+  const locaisSabado = useMemo(() => {
+    return baseLocais.filter((l) => !(isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo)));
+  }, [baseLocais]);
+  const sabadoTotal = locaisSabado.length;
+  const sabadoImplantadas = useMemo(() => locaisSabado.filter((l) => isSim(l.implantada)).length, [locaisSabado]);
+  const sabadoPendentes = sabadoTotal - sabadoImplantadas;
+  const sabadoPct = sabadoTotal > 0 ? ((sabadoImplantadas / sabadoTotal) * 100).toFixed(1) : '0.0';
+
+  // 2. Acompanhamento Operacional de DOMINGO (04/OUT - Pleito / Com necessidade no domingo)
+  const locaisDomingo = useMemo(() => {
+    return baseLocais.filter((l) => isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo));
+  }, [baseLocais]);
+  const domingoTotal = locaisDomingo.length;
+  const domingoImplantadas = useMemo(() => locaisDomingo.filter((l) => isSim(l.implantada)).length, [locaisDomingo]);
+  const domingoPendentes = domingoTotal - domingoImplantadas;
+  const domingoPct = domingoTotal > 0 ? ((domingoImplantadas / domingoTotal) * 100).toFixed(1) : '0.0';
+
+  // 3. Acompanhamento Geral Consolidado (Implantação e Desmobilização)
   const totalImplantadas = useMemo(() => baseLocais.filter((l) => isSim(l.implantada)).length, [baseLocais]);
   const totalNaoImplantadas = totalLocais - totalImplantadas;
   const totalDesmobilizadas = useMemo(() => baseLocais.filter((l) => isSim(l.desmobilizada)).length, [baseLocais]);
@@ -225,10 +264,24 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
   // Dataset final para a tabela
   const filteredLocais = useMemo(() => {
     return baseLocais.filter((l) => {
-      if (statusFilter === 'IMPLANTADAS' && !isSim(l.implantada)) return false;
-      if (statusFilter === 'DESMOBILIZADAS' && !isSim(l.desmobilizada)) return false;
+      const hasDomingoImp = isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo);
+      const isImp = isSim(l.implantada);
+      const isDesm = isSim(l.desmobilizada);
+
+      if (statusFilter === 'SABADO_TODOS' && hasDomingoImp) return false;
+      if (statusFilter === 'SABADO_IMPLANTADAS' && (hasDomingoImp || !isImp)) return false;
+      if (statusFilter === 'SABADO_PENDENTES' && (hasDomingoImp || isImp)) return false;
+
+      if (statusFilter === 'DOMINGO_TODOS' && !hasDomingoImp) return false;
+      if (statusFilter === 'DOMINGO_IMPLANTADAS' && (!hasDomingoImp || !isImp)) return false;
+      if (statusFilter === 'DOMINGO_PENDENTES' && (!hasDomingoImp || isImp)) return false;
+
+      if (statusFilter === 'IMPLANTADAS' && !isImp) return false;
+      if (statusFilter === 'NAO_IMPLANTADAS' && isImp) return false;
+      if (statusFilter === 'DESMOBILIZADAS' && !isDesm) return false;
+      if (statusFilter === 'NAO_DESMOBILIZADAS' && isDesm) return false;
       if (statusFilter === 'SENSIVEIS' && !isSim(l.areaSensivel)) return false;
-      if (statusFilter === 'DOMINGO' && !(isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo))) return false;
+      if (statusFilter === 'DOMINGO' && !hasDomingoImp) return false;
       if (statusFilter === 'BLINDADO' && !(isSim(l.blindado) || isSim(l.utilizacaoBlindado))) return false;
       if (statusFilter === 'ALTERACOES' && !hasObservacao(l)) return false;
       if (statusFilter === 'DUPLICIDADES' && !l.isDuplicado) return false;
@@ -406,103 +459,317 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
         </div>
       </div>
 
-      {/* 2. PAINEL DE ACOMPANHAMENTO: IMPLANTAÇÃO E DESMOBILIZAÇÃO */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Painel Implantação de Urnas */}
-        <div className="bg-white border border-emerald-300 rounded-xl p-3.5 shadow-xs space-y-2">
-          <div className="flex items-center justify-between pb-1.5 border-b border-emerald-100">
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded bg-emerald-100 text-emerald-800">
-                <PlayCircle className="w-4 h-4 text-emerald-700" />
-              </span>
-              <div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase">
-                  URNA IMPLANTADA
-                </h3>
-              </div>
-            </div>
-
-            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 text-xs font-black font-mono">
-              {pctImplantadas}%
-            </span>
+      {/* 2. PAINEL DE ACOMPANHAMENTO: IMPLANTAÇÃO (SÁBADO VS DOMINGO) E DESMOBILIZAÇÃO */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider">
+              Monitoramento Operacional de Urnas • Implantação e Desmobilização
+            </h3>
           </div>
-
-          <div>
-            <button
-              onClick={() => setStatusFilter(statusFilter === 'IMPLANTADAS' ? 'TODOS' : 'IMPLANTADAS')}
-              className={`w-full p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                statusFilter === 'IMPLANTADAS'
-                  ? 'bg-emerald-100 border-emerald-500 ring-2 ring-emerald-500/20'
-                  : 'bg-emerald-50/50 border-emerald-200 hover:bg-emerald-100/50'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-emerald-800 uppercase block">
-                  Urnas Implantadas (SIM)
-                </span>
-                <span className="text-xs font-bold text-emerald-700">({pctImplantadas}%)</span>
-              </div>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-xl font-black text-emerald-900">{totalImplantadas.toLocaleString('pt-BR')}</span>
-                <span className="text-xs text-slate-500">de {totalLocais.toLocaleString('pt-BR')} locais</span>
-              </div>
-            </button>
-          </div>
-
-          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-emerald-600 h-full rounded-full transition-all duration-500"
-              style={{ width: `${pctImplantadas}%` }}
-            ></div>
-          </div>
+          <span className="text-[10px] text-slate-500 font-semibold hidden sm:inline">
+            Clique nos botões dos quadros para filtrar instantaneamente os locais na tabela
+          </span>
         </div>
 
-        {/* Painel Desmobilização */}
-        <div className="bg-white border border-blue-300 rounded-xl p-3.5 shadow-xs space-y-2">
-          <div className="flex items-center justify-between pb-1.5 border-b border-blue-100">
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded bg-blue-100 text-blue-800">
-                <StopCircle className="w-4 h-4 text-blue-700" />
-              </span>
-              <div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase">
-                  DESMOBILIZAÇÃO
-                </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Card 1: Implantação de SÁBADO */}
+          <div className={`bg-white border rounded-xl p-3.5 shadow-xs space-y-2.5 transition-all ${
+            statusFilter.startsWith('SABADO') ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20' : 'border-emerald-300'
+          }`}>
+            <div className="flex items-center justify-between pb-1.5 border-b border-emerald-100">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 rounded bg-emerald-100 text-emerald-800">
+                  <PlayCircle className="w-4 h-4 text-emerald-700" />
+                </span>
+                <div>
+                  <span className="text-[9px] font-bold text-emerald-800 uppercase block">03/OUT (Sábado)</span>
+                  <h4 className="text-xs font-black text-slate-900">IMPLANTAÇÃO SÁBADO</h4>
+                </div>
               </div>
+              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 text-xs font-black font-mono">
+                {sabadoPct}%
+              </span>
             </div>
 
-            <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 text-xs font-black font-mono">
-              {pctDesmobilizadas}%
-            </span>
-          </div>
+            <p className="text-[10px] text-slate-500 leading-tight">
+              Locais sem necessidade no domingo (meta de entrega integral no sábado).
+            </p>
 
-          <div>
-            <button
-              onClick={() => setStatusFilter(statusFilter === 'DESMOBILIZADAS' ? 'TODOS' : 'DESMOBILIZADAS')}
-              className={`w-full p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                statusFilter === 'DESMOBILIZADAS'
-                  ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-500/20'
-                  : 'bg-blue-50/50 border-blue-200 hover:bg-blue-100/50'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-blue-800 uppercase block">
-                  Locais Desmobilizados (SIM)
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'SABADO_IMPLANTADAS' ? 'TODOS' : 'SABADO_IMPLANTADAS')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'SABADO_IMPLANTADAS'
+                    ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'SABADO_IMPLANTADAS' ? 'text-emerald-100' : 'text-emerald-700'}`}>
+                  Já Implantadas
                 </span>
-                <span className="text-xs font-bold text-blue-700">({pctDesmobilizadas}%)</span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {sabadoImplantadas.toLocaleString('pt-BR')}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'SABADO_PENDENTES' ? 'TODOS' : 'SABADO_PENDENTES')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'SABADO_PENDENTES'
+                    ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                    : 'bg-rose-50 hover:bg-rose-100 text-rose-950 border-rose-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'SABADO_PENDENTES' ? 'text-rose-100' : 'text-rose-700'}`}>
+                  Pendentes Sáb.
+                </span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {sabadoPendentes.toLocaleString('pt-BR')}
+                </span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-emerald-600 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${sabadoPct}%` }}
+                ></div>
               </div>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-xl font-black text-blue-900">{totalDesmobilizadas.toLocaleString('pt-BR')}</span>
-                <span className="text-xs text-slate-500">de {totalLocais.toLocaleString('pt-BR')} locais</span>
+              <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                <span>Total Sábado: <strong>{sabadoTotal.toLocaleString('pt-BR')}</strong></span>
+                <button
+                  onClick={() => setStatusFilter(statusFilter === 'SABADO_TODOS' ? 'TODOS' : 'SABADO_TODOS')}
+                  className="text-emerald-700 hover:underline font-bold"
+                >
+                  Ver todos ({sabadoTotal})
+                </button>
               </div>
-            </button>
+            </div>
           </div>
 
-          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-blue-600 h-full rounded-full transition-all duration-500"
-              style={{ width: `${pctDesmobilizadas}%` }}
-            ></div>
+          {/* Card 2: Implantação de DOMINGO */}
+          <div className={`bg-white border rounded-xl p-3.5 shadow-xs space-y-2.5 transition-all ${
+            statusFilter.startsWith('DOMINGO') ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/20' : 'border-amber-300'
+          }`}>
+            <div className="flex items-center justify-between pb-1.5 border-b border-amber-100">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 rounded bg-amber-100 text-amber-800">
+                  <Clock className="w-4 h-4 text-amber-700" />
+                </span>
+                <div>
+                  <span className="text-[9px] font-bold text-amber-800 uppercase block">04/OUT (Domingo)</span>
+                  <h4 className="text-xs font-black text-slate-900">IMPLANTAÇÃO DOMINGO</h4>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-xs font-black font-mono">
+                {domingoPct}%
+              </span>
+            </div>
+
+            <p className="text-[10px] text-slate-500 leading-tight">
+              Locais com necessidade no domingo (áreas sensíveis e segurança na madrugada).
+            </p>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'DOMINGO_IMPLANTADAS' ? 'TODOS' : 'DOMINGO_IMPLANTADAS')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'DOMINGO_IMPLANTADAS'
+                    ? 'bg-amber-600 text-white border-amber-700 shadow-2xs'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-950 border-amber-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'DOMINGO_IMPLANTADAS' ? 'text-amber-100' : 'text-amber-700'}`}>
+                  Já Implantadas
+                </span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {domingoImplantadas.toLocaleString('pt-BR')}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'DOMINGO_PENDENTES' ? 'TODOS' : 'DOMINGO_PENDENTES')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'DOMINGO_PENDENTES'
+                    ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                    : 'bg-rose-50 hover:bg-rose-100 text-rose-950 border-rose-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'DOMINGO_PENDENTES' ? 'text-rose-100' : 'text-rose-700'}`}>
+                  Pendentes Dom.
+                </span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {domingoPendentes.toLocaleString('pt-BR')}
+                </span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-amber-600 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${domingoPct}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                <span>Total Domingo: <strong>{domingoTotal.toLocaleString('pt-BR')}</strong></span>
+                <button
+                  onClick={() => setStatusFilter(statusFilter === 'DOMINGO_TODOS' ? 'TODOS' : 'DOMINGO_TODOS')}
+                  className="text-amber-700 hover:underline font-bold"
+                >
+                  Ver todos ({domingoTotal})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Total Geral Acumulado de Urnas */}
+          <div className={`bg-white border rounded-xl p-3.5 shadow-xs space-y-2.5 transition-all ${
+            statusFilter === 'IMPLANTADAS' || statusFilter === 'NAO_IMPLANTADAS'
+              ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/20'
+              : 'border-slate-300'
+          }`}>
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 rounded bg-blue-100 text-blue-800">
+                  <CheckCircle2 className="w-4 h-4 text-blue-700" />
+                </span>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Consolidado Geral</span>
+                  <h4 className="text-xs font-black text-slate-900">TOTAL IMPLANTADO</h4>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 text-xs font-black font-mono">
+                {pctImplantadas}%
+              </span>
+            </div>
+
+            <p className="text-[10px] text-slate-500 leading-tight">
+              Soma total de urnas implantadas no estado (Sábado + Domingo).
+            </p>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'IMPLANTADAS' ? 'TODOS' : 'IMPLANTADAS')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'IMPLANTADAS'
+                    ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
+                    : 'bg-blue-50 hover:bg-blue-100 text-blue-950 border-blue-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'IMPLANTADAS' ? 'text-blue-100' : 'text-blue-700'}`}>
+                  Total Implantado
+                </span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {totalImplantadas.toLocaleString('pt-BR')}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'NAO_IMPLANTADAS' ? 'TODOS' : 'NAO_IMPLANTADAS')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'NAO_IMPLANTADAS'
+                    ? 'bg-slate-700 text-white border-slate-800 shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'NAO_IMPLANTADAS' ? 'text-slate-200' : 'text-slate-600'}`}>
+                  Total Pendente
+                </span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {totalNaoImplantadas.toLocaleString('pt-BR')}
+                </span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pctImplantadas}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                <span>Total Geral: <strong>{totalLocais.toLocaleString('pt-BR')}</strong></span>
+                <span className="text-slate-500 font-semibold">{totalNaoImplantadas} restantes</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Desmobilização */}
+          <div className={`bg-white border rounded-xl p-3.5 shadow-xs space-y-2.5 transition-all ${
+            statusFilter === 'DESMOBILIZADAS' || statusFilter === 'NAO_DESMOBILIZADAS'
+              ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/20'
+              : 'border-indigo-300'
+          }`}>
+            <div className="flex items-center justify-between pb-1.5 border-b border-indigo-100">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 rounded bg-indigo-100 text-indigo-800">
+                  <StopCircle className="w-4 h-4 text-indigo-700" />
+                </span>
+                <div>
+                  <span className="text-[9px] font-bold text-indigo-800 uppercase block">Término do Pleito</span>
+                  <h4 className="text-xs font-black text-slate-900">DESMOBILIZAÇÃO</h4>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 text-xs font-black font-mono">
+                {pctDesmobilizadas}%
+              </span>
+            </div>
+
+            <p className="text-[10px] text-slate-500 leading-tight">
+              Recolhimento de urnas e desmobilização dos locais de votação.
+            </p>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'DESMOBILIZADAS' ? 'TODOS' : 'DESMOBILIZADAS')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'DESMOBILIZADAS'
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                    : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'DESMOBILIZADAS' ? 'text-indigo-100' : 'text-indigo-700'}`}>
+                  Desmobilizados
+                </span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {totalDesmobilizadas.toLocaleString('pt-BR')}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter(statusFilter === 'NAO_DESMOBILIZADAS' ? 'TODOS' : 'NAO_DESMOBILIZADAS')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  statusFilter === 'NAO_DESMOBILIZADAS'
+                    ? 'bg-slate-700 text-white border-slate-800 shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                }`}
+              >
+                <span className={`text-[9px] font-bold uppercase block ${statusFilter === 'NAO_DESMOBILIZADAS' ? 'text-slate-200' : 'text-slate-600'}`}>
+                  Em Votação / Aguard.
+                </span>
+                <span className="text-lg font-black font-mono block mt-0.5">
+                  {totalNaoDesmobilizadas.toLocaleString('pt-BR')}
+                </span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pctDesmobilizadas}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                <span>Total: <strong>{totalLocais.toLocaleString('pt-BR')}</strong></span>
+                <span className="text-slate-500 font-semibold">{totalNaoDesmobilizadas} pendentes</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -621,21 +888,130 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
               </select>
             </div>
 
-            {/* Exportar PDF Respeitando Estritamente os Filtros Ativos */}
-            <button
-              onClick={() => {
-                exportLocaisPdf(baseLocais, {
-                  cpa: selectedCpa,
-                  uop: selectedUop,
-                  statusFilter,
-                  search: searchTerm,
-                });
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
-            >
-              <FileDown className="w-4 h-4" />
-              <span>Exportar PDF</span>
-            </button>
+            {/* Menu Dropdown de Exportação em PDF com Filtros e Tipos de Relatório */}
+            <div className="relative inline-block text-left">
+              <div className="inline-flex rounded-lg shadow-2xs">
+                <button
+                  onClick={() => {
+                    exportLocaisPdf(locaisEnriched, {
+                      cpa: selectedCpa,
+                      uop: selectedUop,
+                      statusFilter,
+                      search: searchTerm,
+                      reportType: 'COMPLETO',
+                    });
+                  }}
+                  title={`Baixar PDF de Locais de Votação com os filtros ativos (${selectedUop !== 'TODAS' ? selectedUop : selectedCpa})`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-l-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>
+                    {selectedUop !== 'TODAS'
+                      ? `Exportar PDF (${selectedUop})`
+                      : selectedCpa !== 'TODOS'
+                      ? `Exportar PDF (${selectedCpa})`
+                      : statusFilter !== 'TODOS'
+                      ? `Exportar PDF (${statusFilter})`
+                      : 'Exportar PDF'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPdfDropdownOpen((prev) => !prev)}
+                  title="Opções de relatório (Completo, Sintético ou Geral do Estado)"
+                  className="px-2 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-r-lg border-l border-blue-500 cursor-pointer"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {pdfDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setPdfDropdownOpen(false)}
+                  />
+                  <div className="origin-top-right absolute right-0 mt-1 w-72 rounded-lg shadow-lg bg-white ring-1 ring-black/5 divide-y divide-slate-100 z-30">
+                    <div className="p-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 rounded-t-lg">
+                      {selectedCpa !== 'TODOS' || selectedUop !== 'TODAS'
+                        ? `Filtrado: ${selectedUop !== 'TODAS' ? selectedUop : selectedCpa}`
+                        : 'Relatórios dos Locais de Votação:'}
+                    </div>
+
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          exportLocaisPdf(locaisEnriched, {
+                            cpa: selectedCpa,
+                            uop: selectedUop,
+                            statusFilter,
+                            search: searchTerm,
+                            reportType: 'COMPLETO',
+                          });
+                          setPdfDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-bold cursor-pointer"
+                      >
+                        <span>PDF — Relatório Completo</span>
+                        <span className="text-[10px] text-slate-600 font-normal">Filtros atuais</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          exportLocaisPdf(locaisEnriched, {
+                            cpa: selectedCpa,
+                            uop: selectedUop,
+                            statusFilter,
+                            search: searchTerm,
+                            reportType: 'SINTETICO',
+                          });
+                          setPdfDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="font-semibold">PDF — Quadro Síntese por Unidade</span>
+                        <span className="text-[10px] text-slate-600 font-normal">Executivo</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          exportLocaisPdf(locaisEnriched, {
+                            cpa: selectedCpa,
+                            uop: selectedUop,
+                            statusFilter,
+                            search: searchTerm,
+                            reportType: 'DETALHADO',
+                          });
+                          setPdfDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="font-semibold">PDF — Listagem Detalhada de Locais</span>
+                        <span className="text-[10px] text-slate-600 font-normal">Com endereços</span>
+                      </button>
+                    </div>
+
+                    <div className="py-1 bg-slate-50/50 rounded-b-lg">
+                      <button
+                        onClick={() => {
+                          exportLocaisPdf(locaisEnriched, {
+                            cpa: 'TODOS',
+                            uop: 'TODAS',
+                            statusFilter: 'TODOS',
+                            reportType: 'COMPLETO',
+                          });
+                          setPdfDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between cursor-pointer font-bold"
+                      >
+                        <span>PDF — Geral Completo (Todo o Estado)</span>
+                        <span className="text-[10px] text-blue-600 font-normal">Sem filtros</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

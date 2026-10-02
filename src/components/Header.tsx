@@ -5,7 +5,6 @@ import {
   MapPin,
   LogOut,
   RefreshCw,
-  Link2,
 } from 'lucide-react';
 import { ActiveTab } from '../types';
 
@@ -136,18 +135,6 @@ export const Header: React.FC<HeaderProps> = ({
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Atualizando...' : 'Sincronizar'}</span>
           </button>
-
-          {onOpenSettings && (
-            <button
-              onClick={onOpenSettings}
-              title="Configurar Links das Planilhas"
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <Link2 className="w-3.5 h-3.5 text-slate-400" />
-              <span className="hidden sm:inline">Conectar Planilhas</span>
-              <span className="sm:hidden">Planilhas</span>
-            </button>
-          )}
 
           <button
             onClick={onLogout}

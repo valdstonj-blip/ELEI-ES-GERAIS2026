@@ -18,13 +18,13 @@ function normalizeCpaName(raw: string): string {
 /**
  * Aplica cabeçalho e rodapé limpos, técnicos e corporativos da Seção de Planejamento EMG-PM/3
  * NÃO inclui 'Governo do Estado' nem 'Polícia Militar'.
- * Usa apenas 'EMG-PM/3 — SEÇÃO DE PLANEJAMENTO / OPERAÇÕES' e 'RELATÓRIO • ELEIÇÕES 2026'.
+ * Usa apenas 'OPERAÇÃO ELEIÇÕES 2026 — SEÇÃO DE PLANEJAMENTO OPERACIONAL' e 'RELATÓRIO • ELEIÇÕES 2026'.
  */
 function applyReportHeaderAndFooter(
   doc: jsPDF,
   title: string,
   subtitle?: string,
-  subsystemLabel: string = 'RELATÓRIO DE GESTÃO E ACOMPANHAMENTO DE LOCAIS'
+  subsystemLabel: string = 'SISTEMA DE GESTÃO E ACOMPANHAMENTO OPERACIONAL'
 ) {
   const pageCount = (doc as any).internal.getNumberOfPages();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -34,28 +34,34 @@ function applyReportHeaderAndFooter(
     doc.setPage(i);
 
     // ==========================================
-    // CABEÇALHO LIMPO E DISCRETO (EMG-PM/3)
+    // CABEÇALHO LIMPO E DISCRETO
     // ==========================================
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
+    doc.setFontSize(9);
     doc.setTextColor(30, 41, 59); // slate-800
-    doc.text('EMG-PM/3 — PLANEJAMENTO ELEIÇÕES GERAIS 2026', pageWidth / 2, 8.5, { align: 'center' });
+    doc.text('OPERAÇÃO ELEIÇÕES 2026 — SEÇÃO DE PLANEJAMENTO OPERACIONAL', pageWidth / 2, 7.5, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105); // slate-600
-    doc.text(subsystemLabel, pageWidth / 2, 12.5, { align: 'center' });
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.text(subsystemLabel, pageWidth / 2, 11.5, { align: 'center' });
 
     if (title) {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(15, 23, 42); // slate-900
-      const fullTitle = subtitle ? `${title.toUpperCase()} • ${subtitle}` : title.toUpperCase();
-      doc.text(fullTitle, 10, 16.5);
+      doc.text(title.toUpperCase(), 10, 16);
+    }
+
+    if (subtitle) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105); // slate-600
+      doc.text(subtitle, pageWidth - 10, 16, { align: 'right' });
     }
 
     // Linha divisória sutil perfeitamente separada
-    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setDrawColor(203, 213, 225); // slate-300
     doc.setLineWidth(0.3);
     doc.line(10, 18, pageWidth - 10, 18);
 
@@ -78,8 +84,16 @@ function applyReportHeaderAndFooter(
   }
 }
 
+export interface LocaisPdfOptions {
+  cpa?: string;
+  uop?: string;
+  statusFilter?: string;
+  search?: string;
+  reportType?: 'COMPLETO' | 'SINTETICO' | 'DETALHADO';
+}
+
 /**
- * Exporta o Relatório de Locais de Votação (Aba Planilha Geral Dash)
+ * Exporta o Relatório de Locais de Votação
  * Responde diretamente às perguntas solicitadas pelo operador:
  * 1. Locais de Votação
  * 2. CPA selecionado (ou todos)
@@ -88,11 +102,10 @@ function applyReportHeaderAndFooter(
  * 5. Utilização do Blindado para Implantação da Urna (Sim/Não)
  * 6. Eleitores Aptos
  * 7. Status do Evento: Urna Implantada no Local (Sim/Não) e Desmobilização (Sim/Não)
- * (Informações de efetivo 03OUT e 04OUT retiradas conforme determinação do operador)
  */
 export function exportLocaisPdf(
   locais: LocalVotacao[],
-  filters?: { cpa?: string; uop?: string; statusFilter?: string; search?: string }
+  filters?: LocaisPdfOptions
 ) {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -102,6 +115,7 @@ export function exportLocaisPdf(
 
   const cpaFilter = filters?.cpa || 'TODOS';
   const uopFilter = filters?.uop || 'TODAS';
+  const reportType = filters?.reportType || 'COMPLETO';
 
   // 1. Filtragem estrita e precisa
   let filtered = locais;
@@ -174,31 +188,121 @@ export function exportLocaisPdf(
   const pctDesmob = total > 0 ? ((desmobilizadas / total) * 100).toFixed(1) : '0.0';
 
   // =========================================================================
-  // CARD DE QUANTITATIVO E ELEITORADO (Apenas o card solicitado)
-  // Conforme solicitação do operador: sem caixas secundárias nem efetivo
+  // PAINEL DE INDICADORES EXECUTIVOS (5 CARDS DE METAS - LARGURA TOTAL 277MM)
   // =========================================================================
-  const cardY = 25;
-  const cardHeight = 17;
+  const cardY = 22;
+  const cardHeight = 17.5;
+  const cardW = 53;
+  const gap = 3;
 
-  // Box 1: Quantitativo e Eleitorado
+  // Card 1: Locais & Eleitores
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(203, 213, 225); // slate-300
   doc.setLineWidth(0.3);
-  doc.roundedRect(14, cardY, 90, cardHeight, 1.5, 1.5, 'FD');
+  doc.roundedRect(10, cardY, cardW, cardHeight, 1.5, 1.5, 'FD');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(30, 41, 59);
-  doc.text('LOCAIS DE VOTAÇÃO & ELEITORES', 18, cardY + 5.5);
+  doc.setFontSize(6.2);
+  doc.setTextColor(71, 85, 105);
+  doc.text('LOCAIS DE VOTAÇÃO', 13, cardY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text(total.toLocaleString('pt-BR'), 13, cardY + 10.5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text(`Total de Locais de Votação: ${total.toLocaleString('pt-BR')}`, 18, cardY + 10.5);
-  doc.text(`Eleitores Aptos: ${totalAptos.toLocaleString('pt-BR')}`, 18, cardY + 15);
+  doc.setFontSize(6.2);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Eleitores: ${totalAptos.toLocaleString('pt-BR')}`, 13, cardY + 14.8);
+
+  // Card 2: Áreas Sensíveis
+  const c2X = 10 + cardW + gap;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(253, 164, 175); // rose-300
+  doc.roundedRect(c2X, cardY, cardW, cardHeight, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.2);
+  doc.setTextColor(159, 18, 57); // rose-800
+  doc.text('ÁREAS SENSÍVEIS (RISCO)', c2X + 3, cardY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(190, 18, 60); // rose-700
+  doc.text(sensiveis.toLocaleString('pt-BR'), c2X + 3, cardY + 10.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.2);
+  doc.setTextColor(225, 29, 72); // rose-600
+  doc.text(`${total > 0 ? ((sensiveis / total) * 100).toFixed(1) : '0.0'}% dos locais`, c2X + 3, cardY + 14.8);
+
+  // Card 3: Apoio Blindado & Domingo
+  const c3X = c2X + cardW + gap;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(199, 210, 254); // indigo-300
+  doc.roundedRect(c3X, cardY, cardW, cardHeight, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.2);
+  doc.setTextColor(67, 56, 202); // indigo-700
+  doc.text('APOIO OPERACIONAL', c3X + 3, cardY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 27, 75); // indigo-950
+  doc.text(`Blindado: ${blindado.toLocaleString('pt-BR')}`, c3X + 3, cardY + 10.2);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.2);
+  doc.setTextColor(180, 83, 9); // amber-700
+  doc.text(`Urna Domingo: ${impDomingo.toLocaleString('pt-BR')} locais`, c3X + 3, cardY + 14.8);
+
+  // Card 4: Urnas Implantadas
+  const c4X = c3X + cardW + gap;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(167, 243, 208); // emerald-300
+  doc.roundedRect(c4X, cardY, cardW, cardHeight, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.2);
+  doc.setTextColor(4, 120, 87); // emerald-700
+  doc.text('URNAS IMPLANTADAS', c4X + 3, cardY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(4, 120, 87);
+  doc.text(`${implantadas.toLocaleString('pt-BR')} (${pctImp}%)`, c4X + 3, cardY + 10.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.2);
+  doc.setTextColor(5, 150, 105);
+  doc.text(`Meta total: ${total.toLocaleString('pt-BR')} locais`, c4X + 3, cardY + 14.8);
+
+  // Card 5: Desmobilização
+  const c5X = c4X + cardW + gap;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(191, 219, 254); // blue-300
+  doc.roundedRect(c5X, cardY, cardW, cardHeight, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.2);
+  doc.setTextColor(29, 78, 216); // blue-700
+  doc.text('DESMOBILIZAÇÃO DE URNAS', c5X + 3, cardY + 4.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(29, 78, 216);
+  doc.text(`${desmobilizadas.toLocaleString('pt-BR')} (${pctDesmob}%)`, c5X + 3, cardY + 10.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.2);
+  doc.setTextColor(37, 99, 235);
+  doc.text('Concluídas no período', c5X + 3, cardY + 14.8);
 
   // =========================================================================
-  // TABELA 1: SÍNTESE POR UNIDADE (UOP)
+  // TABELA 1: SÍNTESE CONSOLIDADA POR UNIDADE (UOP)
+  // Gerada nos modos COMPLETO e SINTETICO
   // =========================================================================
   const uopGroups: Record<
     string,
@@ -207,6 +311,7 @@ export function exportLocaisPdf(
       total: number;
       sensiveis: number;
       blindado: number;
+      domingo: number;
       aptos: number;
       imp: number;
       desmob: number;
@@ -221,6 +326,7 @@ export function exportLocaisPdf(
         total: 0,
         sensiveis: 0,
         blindado: 0,
+        domingo: 0,
         aptos: 0,
         imp: 0,
         desmob: 0,
@@ -230,6 +336,7 @@ export function exportLocaisPdf(
     g.total++;
     if (isSim(l.areaSensivel)) g.sensiveis++;
     if (isSim(l.blindado) || isSim(l.utilizacaoBlindado)) g.blindado++;
+    if (isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo)) g.domingo++;
     g.aptos += Number(l.qtdAptos || l.totalEleitoresAptos) || 0;
     if (isSim(l.implantada)) g.imp++;
     if (isSim(l.desmobilizada)) g.desmob++;
@@ -243,202 +350,332 @@ export function exportLocaisPdf(
         g.cpa,
         uop,
         g.total.toString(),
-        g.sensiveis.toString(),
+        g.sensiveis > 0 ? `${g.sensiveis} (${((g.sensiveis / g.total) * 100).toFixed(0)}%)` : '0',
         g.blindado.toString(),
+        g.domingo.toString(),
         g.aptos.toLocaleString('pt-BR'),
         `${g.imp} (${g.total > 0 ? ((g.imp / g.total) * 100).toFixed(0) : 0}%)`,
         `${g.desmob} (${g.total > 0 ? ((g.desmob / g.total) * 100).toFixed(0) : 0}%)`,
       ];
     });
 
-  autoTable(doc, {
-    startY: 45,
-    head: [
-      [
-        'CPA',
-        'Unidade (UOP)',
-        'Locais',
-        'Área Sensível',
-        'Blindado',
-        'Eleitores Aptos',
-        'Urna Implantada',
-        'Desmobilização',
+  const uopSummaryFoot = [
+    [
+      'TOTAL',
+      `${Object.keys(uopGroups).length} UOPs`,
+      total.toLocaleString('pt-BR'),
+      sensiveis > 0 ? `${sensiveis} (${total > 0 ? ((sensiveis / total) * 100).toFixed(0) : 0}%)` : '0',
+      blindado.toLocaleString('pt-BR'),
+      impDomingo.toLocaleString('pt-BR'),
+      totalAptos.toLocaleString('pt-BR'),
+      `${implantadas} (${pctImp}%)`,
+      `${desmobilizadas} (${pctDesmob}%)`,
+    ],
+  ];
+
+  let nextTableStartY = 43;
+
+  if (reportType !== 'DETALHADO') {
+    autoTable(doc, {
+      startY: 43,
+      head: [
+        [
+          'CPA',
+          'Unidade (UOP)',
+          'Total Locais',
+          'Área Sensível',
+          'Apoio Blindado',
+          'Urna Domingo',
+          'Eleitores Aptos',
+          'Urnas Implantadas',
+          'Desmobilização',
+        ],
       ],
-    ],
-    body: uopSummaryRows,
-    margin: { top: 25, bottom: 15, left: 14, right: 14 },
-    theme: 'grid',
-    headStyles: {
-      fillColor: [30, 41, 59], // slate-800
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 7.5,
-      halign: 'center',
-    },
-    styles: {
-      fontSize: 7,
-      cellPadding: 1.6,
-      overflow: 'linebreak',
-      textColor: [30, 41, 59],
-      halign: 'center',
-      valign: 'middle',
-    },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 22 },
-      1: { halign: 'left', fontStyle: 'bold', cellWidth: 42 },
-      2: { halign: 'center', fontStyle: 'bold', cellWidth: 20 },
-      3: { halign: 'center', textColor: [185, 28, 28], fontStyle: 'bold', cellWidth: 26 }, // rose-700
-      4: { halign: 'center', textColor: [67, 56, 202], fontStyle: 'bold', cellWidth: 24 }, // indigo-700
-      5: { halign: 'right', cellWidth: 32 },
-      6: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 32 }, // emerald-700
-      7: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 32 }, // blue-700
-    },
-  });
+      body: uopSummaryRows,
+      foot: uopSummaryFoot,
+      margin: { top: 24, bottom: 12, left: 10, right: 10 },
+      theme: 'grid',
+      headStyles: {
+        fillColor: [30, 41, 59], // slate-800
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 7.5,
+        halign: 'center',
+      },
+      footStyles: {
+        fillColor: [15, 23, 42], // slate-900
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 7.5,
+        halign: 'center',
+      },
+      styles: {
+        fontSize: 7,
+        cellPadding: 1.5,
+        overflow: 'linebreak',
+        textColor: [30, 41, 59],
+        halign: 'center',
+        valign: 'middle',
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 24 },
+        1: { halign: 'left', fontStyle: 'bold', cellWidth: 46 },
+        2: { halign: 'center', fontStyle: 'bold', cellWidth: 25 },
+        3: { halign: 'center', textColor: [185, 28, 28], fontStyle: 'bold', cellWidth: 28 }, // rose-700
+        4: { halign: 'center', textColor: [67, 56, 202], fontStyle: 'bold', cellWidth: 26 }, // indigo-700
+        5: { halign: 'center', textColor: [180, 83, 9], fontStyle: 'bold', cellWidth: 26 },  // amber-700
+        6: { halign: 'right', cellWidth: 34 },
+        7: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 34 }, // emerald-700
+        8: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 34 }, // blue-700
+      },
+    });
 
-  // =========================================================================
-  // TABELA 2: LISTAGEM COMPLETA DOS LOCAIS DE VOTAÇÃO
-  // Toda a base filtrada (sem colunas de efetivo conforme solicitado)
-  // =========================================================================
-  const detailRows = filtered.map((l) => {
-    if (isDuplicidadesFilter) {
+    const finalY = (doc as any).lastAutoTable?.finalY || 43;
+    if (finalY < 135 && uopSummaryRows.length <= 4) {
+      nextTableStartY = finalY + 8;
+    } else {
+      nextTableStartY = -1; // força nova página
+    }
+  }
+
+  // Determina se deve renderizar a Tabela 2 (Listagem Detalhada):
+  // Se for o Estado inteiro sem filtros específicos (5.000+ locais) e não for explicitamente DETALHADO,
+  // a Tabela 1 (Quadro Síntese por Batalhão) é o relatório executivo oficial (rápido, limpo e legível).
+  // Se houver qualquer filtro (CPA, UOP, Status ou busca) OU se reportType === 'DETALHADO', renderiza a Tabela 2.
+  const isGlobalGeneral =
+    cpaFilter === 'TODOS' &&
+    uopFilter === 'TODAS' &&
+    (!filters?.statusFilter || filters.statusFilter === 'TODOS') &&
+    !filters?.search;
+
+  const shouldRenderDetails =
+    reportType === 'DETALHADO' || (!isGlobalGeneral && reportType !== 'SINTETICO');
+
+  if (shouldRenderDetails) {
+    const detailRows = filtered.map((l) => {
+      const enderecoCompleto = [l.endereco, l.bairro].filter(Boolean).join(' - ') || '-';
+
+      if (isDuplicidadesFilter) {
+        return [
+          l.numZona || l.zonaEleitoral || '-',
+          l.linhaPlanilha ? `L.${l.linhaPlanilha}` : '-',
+          normalizeCpaName(l.cpa),
+          l.uop || '-',
+          l.nomeLocal || l.local || '-',
+          enderecoCompleto,
+          isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
+          isSim(l.blindado) || isSim(l.utilizacaoBlindado) ? 'SIM' : 'NÃO',
+          l.duplicidadeMotivo || 'Conflito de duplicidade territorial detectado',
+        ];
+      }
+
+      if (isAlteracoesFilter) {
+        return [
+          l.numZona || l.zonaEleitoral || '-',
+          normalizeCpaName(l.cpa),
+          l.uop || '-',
+          l.nomeLocal || l.local || '-',
+          enderecoCompleto,
+          isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
+          (Number(l.qtdAptos || l.totalEleitoresAptos) || 0).toLocaleString('pt-BR'),
+          isSim(l.implantada) ? 'SIM' : 'NÃO',
+          l.observacoes || l.observacao || 'Sem alterações registradas',
+        ];
+      }
+
       return [
-        l.numZona || l.zonaEleitoral || '',
-        l.linhaPlanilha ? `L.${l.linhaPlanilha}` : '-',
+        l.numZona || l.zonaEleitoral || '-',
         normalizeCpaName(l.cpa),
-        l.uop || '',
-        (l.nomeLocal || l.local || '').slice(0, 36),
-        (l.endereco || '').slice(0, 34),
+        l.uop || '-',
+        l.nomeLocal || l.local || '-',
+        enderecoCompleto,
         isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
+        isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo) ? 'SIM' : 'NÃO',
         isSim(l.blindado) || isSim(l.utilizacaoBlindado) ? 'SIM' : 'NÃO',
-        (l.duplicidadeMotivo || 'Duplicidade detectada').slice(0, 65),
+        (Number(l.qtdAptos || l.totalEleitoresAptos) || 0).toLocaleString('pt-BR'),
+        isSim(l.implantada) ? 'SIM' : 'NÃO',
+        isSim(l.desmobilizada) ? 'SIM' : 'NÃO',
       ];
+    });
+
+    if (nextTableStartY === -1 || reportType === 'DETALHADO') {
+      if (reportType !== 'DETALHADO') {
+        doc.addPage();
+      }
+      nextTableStartY = reportType === 'DETALHADO' ? 43 : 24;
     }
 
-    const row = [
-      l.numZona || l.zonaEleitoral || '',
-      normalizeCpaName(l.cpa),
-      l.uop || '',
-      (l.nomeLocal || l.local || '').slice(0, isAlteracoesFilter ? 40 : 48),
-      (l.bairro || '').slice(0, isAlteracoesFilter ? 20 : 24),
-      isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
-      isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo) ? 'SIM' : 'NÃO',
-      isSim(l.blindado) || isSim(l.utilizacaoBlindado) ? 'SIM' : 'NÃO',
-      (l.qtdAptos || l.totalEleitoresAptos || 0).toLocaleString('pt-BR'),
-      isSim(l.implantada) ? 'SIM' : 'NÃO',
-      isSim(l.desmobilizada) ? 'SIM' : 'NÃO',
-    ];
-
-    if (isAlteracoesFilter) {
-      row.push(l.observacoes || l.observacao || '-');
-    }
-    return row;
-  });
-
-  // Sempre iniciar a tabela detalhada em nova página para organização limpa
-  doc.addPage();
-
-  autoTable(doc, {
-    startY: 26,
-    head: [
-      isDuplicidadesFilter
-        ? [
-            'Zona',
-            'Linha',
-            'CPA',
-            'UOP',
-            'Local de Votação',
-            'Endereço',
-            'Sensível',
-            'Blindado',
-            'Identificação da Duplicidade / Conflito Territorial',
-          ]
+    autoTable(doc, {
+      startY: nextTableStartY,
+      head: [
+        isDuplicidadesFilter
+          ? [
+              'Zona',
+              'Linha',
+              'CPA',
+              'UOP',
+              'Local de Votação',
+              'Endereço / Bairro',
+              'Sensível',
+              'Blindado',
+              'Identificação do Conflito / Duplicidade',
+            ]
+          : isAlteracoesFilter
+          ? [
+              'Zona',
+              'CPA',
+              'UOP',
+              'Local de Votação',
+              'Endereço / Bairro',
+              'Sensível',
+              'Aptos',
+              'Implant.',
+              'Observações e Alterações Registradas',
+            ]
+          : [
+              'Zona',
+              'CPA',
+              'UOP',
+              'Local de Votação',
+              'Endereço / Bairro',
+              'Sensível',
+              'Domingo',
+              'Blindado',
+              'Aptos',
+              'Implantada',
+              'Desmobiliz.',
+            ],
+      ],
+      body: detailRows,
+      margin: { top: 24, bottom: 12, left: 10, right: 10 },
+      theme: 'striped',
+      headStyles: {
+        fillColor: [51, 65, 85], // slate-700
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 7,
+        halign: 'center',
+      },
+      styles: {
+        fontSize: 6.5,
+        cellPadding: 1.3,
+        overflow: 'linebreak',
+        textColor: [30, 41, 59],
+        halign: 'center',
+        valign: 'middle',
+      },
+      columnStyles: isDuplicidadesFilter
+        ? {
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 13 },
+            1: { halign: 'center', cellWidth: 15 },
+            2: { halign: 'center', cellWidth: 18 },
+            3: { halign: 'left', fontStyle: 'bold', cellWidth: 20 },
+            4: { halign: 'left', fontStyle: 'bold', cellWidth: 55 },
+            5: { halign: 'left', cellWidth: 48 },
+            6: { halign: 'center', cellWidth: 16 },
+            7: { halign: 'center', cellWidth: 16 },
+            8: { halign: 'left', cellWidth: 76 },
+          }
         : isAlteracoesFilter
-        ? [
-            'Zona',
-            'CPA',
-            'UOP',
-            'Local de Votação',
-            'Bairro',
-            'Sensível',
-            'Domingo',
-            'Blindado',
-            'Aptos',
-            'Implant.',
-            'Desmob.',
-            'Observações e Alterações Registradas',
-          ]
-        : [
-            'Zona',
-            'CPA',
-            'UOP',
-            'Local de Votação',
-            'Bairro',
-            'Sensível',
-            'Domingo',
-            'Blindado',
-            'Aptos',
-            'Implantada',
-            'Desmobiliz.',
-          ],
-    ],
-    body: detailRows,
-    margin: { top: 25, bottom: 15, left: 14, right: 14 },
-    theme: 'striped',
-    headStyles: {
-      fillColor: [51, 65, 85], // slate-700
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 6.8,
-      halign: 'center',
-    },
-    styles: {
-      fontSize: 6.2,
-      cellPadding: 1.2,
-      overflow: 'linebreak',
-      textColor: [30, 41, 59],
-      halign: 'center',
-      valign: 'middle',
-    },
-    columnStyles: isAlteracoesFilter
-      ? {
-          0: { halign: 'center', fontStyle: 'bold', cellWidth: 14 },
-          1: { halign: 'center', cellWidth: 18 },
-          2: { halign: 'center', fontStyle: 'bold', cellWidth: 20 },
-          3: { halign: 'left', fontStyle: 'bold', cellWidth: 46 },
-          4: { halign: 'left', cellWidth: 26 },
-          5: { halign: 'center', cellWidth: 14 },
-          6: { halign: 'center', cellWidth: 14 },
-          7: { halign: 'center', cellWidth: 14 },
-          8: { halign: 'right', cellWidth: 16 },
-          9: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 16 },
-          10: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 16 },
-          11: { halign: 'left', fontStyle: 'bold', textColor: [180, 83, 9] },
-        }
-      : {
-          0: { halign: 'center', fontStyle: 'bold', cellWidth: 16 },
-          1: { halign: 'center', cellWidth: 20 },
-          2: { halign: 'center', fontStyle: 'bold', cellWidth: 24 },
-          3: { halign: 'left', cellWidth: 74 },
-          4: { halign: 'left', cellWidth: 38 },
-          5: { halign: 'center', cellWidth: 18 },
-          6: { halign: 'center', cellWidth: 18 },
-          7: { halign: 'center', cellWidth: 18 },
-          8: { halign: 'right', cellWidth: 24 },
-          9: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 22 },
-          10: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 22 },
-        },
-  });
+        ? {
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 13 },
+            1: { halign: 'center', cellWidth: 18 },
+            2: { halign: 'left', fontStyle: 'bold', cellWidth: 20 },
+            3: { halign: 'left', fontStyle: 'bold', cellWidth: 50 },
+            4: { halign: 'left', cellWidth: 44 },
+            5: { halign: 'center', cellWidth: 15 },
+            6: { halign: 'right', cellWidth: 18 },
+            7: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 17 },
+            8: { halign: 'left', fontStyle: 'bold', textColor: [180, 83, 9], cellWidth: 82 },
+          }
+        : {
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
+            1: { halign: 'center', cellWidth: 18 },
+            2: { halign: 'left', fontStyle: 'bold', cellWidth: 22 },
+            3: { halign: 'left', cellWidth: 64 },
+            4: { halign: 'left', cellWidth: 55 },
+            5: { halign: 'center', cellWidth: 17 },
+            6: { halign: 'center', cellWidth: 17 },
+            7: { halign: 'center', cellWidth: 17 },
+            8: { halign: 'right', cellWidth: 19 },
+            9: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 18 },
+            10: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 18 },
+          },
+    });
+  }
+
+  // Título e escopo institucionais sem menções inadequadas
+  let reportTitle = 'RELATÓRIO OPERACIONAL — LOCAIS DE VOTAÇÃO';
+  let filePrefix = 'RELATORIO_LOCAIS_VOTACAO';
+
+  if (filters?.statusFilter === 'DUPLICIDADES') {
+    reportTitle = 'RELATÓRIO DE AUDITORIA — DUPLICIDADES E CONFLITOS TERRITORIAIS';
+    filePrefix = 'RELATORIO_DUPLICIDADES_LOCAIS';
+  } else if (filters?.statusFilter === 'ALTERACOES') {
+    reportTitle = 'RELATÓRIO DE ALTERAÇÕES E OBSERVAÇÕES — LOCAIS DE VOTAÇÃO';
+    filePrefix = 'RELATORIO_ALTERACOES_LOCAIS';
+  } else if (filters?.statusFilter === 'SENSIVEIS') {
+    reportTitle = 'RELATÓRIO OPERACIONAL — LOCAIS EM ÁREAS SENSÍVEIS';
+    filePrefix = 'RELATORIO_LOCAIS_SENSIVEIS';
+  } else if (filters?.statusFilter === 'IMPLANTADAS') {
+    reportTitle = 'RELATÓRIO OPERACIONAL — URNAS IMPLANTADAS';
+    filePrefix = 'RELATORIO_URNAS_IMPLANTADAS';
+  } else if (filters?.statusFilter === 'NAO_IMPLANTADAS') {
+    reportTitle = 'RELATÓRIO OPERACIONAL — URNAS PENDENTES DE IMPLANTAÇÃO';
+    filePrefix = 'RELATORIO_URNAS_PENDENTES';
+  } else if (filters?.statusFilter === 'DESMOBILIZADAS') {
+    reportTitle = 'RELATÓRIO OPERACIONAL — URNAS DESMOBILIZADAS';
+    filePrefix = 'RELATORIO_URNAS_DESMOBILIZADAS';
+  } else if (filters?.statusFilter === 'NAO_DESMOBILIZADAS') {
+    reportTitle = 'RELATÓRIO OPERACIONAL — URNAS PENDENTES DE DESMOBILIZAÇÃO';
+    filePrefix = 'RELATORIO_URNAS_PENDENTES_DESMOB';
+  } else if (filters?.statusFilter === 'DOMINGO') {
+    reportTitle = 'RELATÓRIO OPERACIONAL — URNAS COM IMPLANTAÇÃO NO DOMINGO';
+    filePrefix = 'RELATORIO_URNAS_DOMINGO';
+  } else if (filters?.statusFilter === 'BLINDADO') {
+    reportTitle = 'RELATÓRIO OPERACIONAL — LOCAIS COM APOIO DE BLINDADO';
+    filePrefix = 'RELATORIO_LOCAIS_BLINDADO';
+  }
+
+  if (isGlobalGeneral && reportType !== 'DETALHADO') {
+    reportTitle += ' (QUADRO CONSOLIDADO)';
+    filePrefix += '_CONSOLIDADO';
+  } else if (reportType === 'SINTETICO') {
+    reportTitle += ' (QUADRO SINTÉTICO)';
+    filePrefix += '_SINTETICO';
+  } else if (reportType === 'DETALHADO') {
+    reportTitle += ' (LISTAGEM DETALHADA)';
+    filePrefix += '_DETALHADO';
+  }
+
+  const scopeParts: string[] = [];
+  if (cpaFilter !== 'TODOS') {
+    scopeParts.push(`Comando: ${cpaFilter}`);
+  } else {
+    scopeParts.push('Âmbito: Todos os CPAs');
+  }
+  if (uopFilter !== 'TODAS') {
+    scopeParts.push(`Unidade: ${uopFilter}`);
+  }
+  scopeParts.push(`Total: ${total.toLocaleString('pt-BR')} Locais`);
+  const subtitle = scopeParts.join(' • ');
 
   applyReportHeaderAndFooter(
     doc,
-    isAlteracoesFilter
-      ? 'RELATÓRIO — ALTERAÇÕES E OBSERVAÇÕES DOS LOCAIS DE VOTAÇÃO'
-      : 'RELATÓRIO — PLANILHA GERAL DASH',
-    `Filtro: ${cpaFilter} • ${uopFilter} • ${isAlteracoesFilter ? `Locais com Alterações: ${total}` : `Total: ${total.toLocaleString('pt-BR')} Locais`}`
+    reportTitle,
+    subtitle,
+    'SISTEMA DE GESTÃO E ACOMPANHAMENTO OPERACIONAL'
   );
 
-  const filePrefix = isAlteracoesFilter ? 'RELATORIO_ALTERACOES_LOCAIS' : 'RELATORIO_LOCAIS_VOTACAO';
-  doc.save(`${filePrefix}_${cpaFilter.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
+  const fileParts = [filePrefix];
+  if (cpaFilter !== 'TODOS') fileParts.push(cpaFilter.replace(/[^A-Za-z0-9]/g, '_'));
+  if (uopFilter !== 'TODAS') fileParts.push(uopFilter.replace(/[^A-Za-z0-9]/g, '_'));
+  if (filters?.statusFilter && filters.statusFilter !== 'TODOS') {
+    fileParts.push(filters.statusFilter);
+  }
+  const filename = `${fileParts.filter(Boolean).join('_').replace(/__+/g, '_')}.pdf`;
+
+  doc.save(filename);
 }
 
 /**

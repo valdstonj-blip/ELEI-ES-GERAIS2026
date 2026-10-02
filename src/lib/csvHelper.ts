@@ -323,6 +323,30 @@ export const CsvHelper = {
     } catch (e) {
       console.warn('Erro ao salvar locais no localStorage:', e);
     }
+
+    try {
+      fetch('/api/locais', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locais: data }),
+      }).catch(() => {});
+    } catch {}
+  },
+
+  async fetchServerLocais(): Promise<LocalVotacao[] | null> {
+    try {
+      const res = await fetch('/api/locais');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.locais) && json.locais.length > 0) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.LOCAIS, JSON.stringify(json.locais));
+          } catch {}
+          return json.locais;
+        }
+      }
+    } catch {}
+    return null;
   },
 
   // 2. Ocorrências (sem dados artificiais ou mocks)

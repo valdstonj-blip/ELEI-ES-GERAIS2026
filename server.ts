@@ -10,9 +10,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const CONFIG_FILE = path.resolve(__dirname, 'sheet-config.json');
+const LOCAIS_DATA_FILE = path.resolve(__dirname, 'locais-data.json');
 
 const DEFAULT_CONFIG = {
   locaisUrl:
@@ -80,6 +82,37 @@ app.post('/api/sheet-config', (req, res) => {
     res.json({ success: true, config: updated });
   } else {
     res.status(500).json({ success: false, message: 'Falha ao salvar configuração no servidor.' });
+  }
+});
+
+// Endpoint para persistência permanente de locais de votação
+app.get('/api/locais', (_req, res) => {
+  try {
+    if (fs.existsSync(LOCAIS_DATA_FILE)) {
+      const raw = fs.readFileSync(LOCAIS_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return res.json({ success: true, count: parsed.length, locais: parsed });
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao ler locais-data.json:', err);
+  }
+  res.json({ success: false, locais: [] });
+});
+
+app.post('/api/locais', (req, res) => {
+  try {
+    const { locais } = req.body || {};
+    if (Array.isArray(locais) && locais.length > 0) {
+      fs.writeFileSync(LOCAIS_DATA_FILE, JSON.stringify(locais), 'utf-8');
+      console.log(`[EMG-PM/3] ${locais.length} locais salvos com persistência no servidor.`);
+      return res.json({ success: true, count: locais.length });
+    }
+    res.status(400).json({ success: false, message: 'Dados inválidos ou vazios.' });
+  } catch (err: any) {
+    console.error('Erro ao gravar locais-data.json:', err);
+    res.status(500).json({ success: false, message: err?.message });
   }
 });
 
