@@ -33,27 +33,60 @@ interface FaltasTabProps {
   onOpenSettings?: () => void;
 }
 
-// Função utilitária precisa para contar policiais em texto com delimitadores (ex: ponto e vírgula)
-export function countPoliciaisInText(text: string | undefined): number {
-  if (!text) return 0;
-  const lower = text.trim().toLowerCase();
-  if (
-    !lower ||
-    lower === 'sem alteração' ||
-    lower === 'sem alteracao' ||
-    lower === 'não houve' ||
-    lower === 'nao houve' ||
-    lower === 'nenhuma' ||
-    lower === 'nenhum' ||
-    lower === 'ok' ||
-    lower === '-'
-  ) {
-    return 0;
+// Função utilitária precisa para detectar se o texto expressa ausência de falta / sem alteração
+export function isSemAlteracaoFalta(text: string | undefined | null): boolean {
+  if (!text) return true;
+  const s = String(text).trim();
+  if (!s || s === '-' || s === '.' || s === '/' || s === '0' || s === '00') return true;
+
+  const norm = s
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!norm || norm === '0' || norm === 'OK') return true;
+
+  const termosSemFalta = [
+    'SEM ALTERACAO',
+    'SEM ALTERACOES',
+    'SEM ALTERAC',
+    'SEM FALTA',
+    'SEM FALTAS',
+    'NAO HOUVE',
+    'NAO HA',
+    'NENHUMA',
+    'NENHUM',
+    'NADA CONSTA',
+    'NADA A RELATAR',
+    'ZERO',
+    'NORMAL',
+    'TUDO NORMAL',
+    'TUDO OK',
+    'NO MOMENTO SEM ALTERACAO',
+    'NO MOMENTO SEM ALTERACOES',
+  ];
+
+  for (const t of termosSemFalta) {
+    if (norm === t || norm.includes(t)) {
+      return true;
+    }
   }
+
+  return false;
+}
+
+// Função utilitária precisa para contar policiais em texto com delimitadores (ex: ponto e vírgula)
+export function countPoliciaisInText(text: string | undefined | null): number {
+  if (!text) return 0;
+  if (isSemAlteracaoFalta(text)) return 0;
+
   const items = text
     .split(/[;\r\n]+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 3);
+    .filter((s) => s.length > 2 && !isSemAlteracaoFalta(s));
   return items.length > 0 ? items.length : 1;
 }
 
@@ -144,14 +177,18 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
   const stats = useMemo(() => {
     const totalEnvios = faltas.length;
     let totalPoliciaisFaltosos = 0;
+    const opmsComFaltasSet = new Set<string>();
 
     faltas.forEach((f) => {
-      totalPoliciaisFaltosos += countPoliciaisInText(f.faltasPoe || f.motivo);
+      const qtd = countPoliciaisInText(f.faltasPoe || f.motivo);
+      totalPoliciaisFaltosos += qtd;
+      if (qtd > 0) {
+        const opmName = (f.opm || f.uopDestino || f.opmOrigem || '').trim();
+        if (opmName) opmsComFaltasSet.add(opmName);
+      }
     });
 
-    const opmsCount = new Set(
-      faltas.map((f) => f.opm || f.uopDestino || f.opmOrigem).filter(Boolean)
-    ).size;
+    const opmsCount = opmsComFaltasSet.size;
 
     return { totalEnvios, totalPoliciaisFaltosos, opmsCount };
   }, [faltas]);
@@ -159,22 +196,11 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
   // Renderizador ajustado para os textos dos policiais faltosos
   const renderPolicialChips = (rawText: string | undefined) => {
     const text = (rawText || '').trim();
-    const lower = text.toLowerCase();
 
-    if (
-      !text ||
-      lower === 'sem alteração' ||
-      lower === 'sem alteracao' ||
-      lower === 'não houve' ||
-      lower === 'nao houve' ||
-      lower === 'nenhuma' ||
-      lower === 'nenhum' ||
-      lower === 'ok' ||
-      lower === '-'
-    ) {
+    if (!text || isSemAlteracaoFalta(text)) {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
-          <CheckCircle2 className="w-3 h-3 text-slate-400" />
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
           <span>Sem alteração</span>
         </span>
       );
@@ -183,10 +209,15 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
     const items = text
       .split(/[;\r\n]+/)
       .map((s) => s.trim())
-      .filter((s) => s.length > 2);
+      .filter((s) => s.length > 2 && !isSemAlteracaoFalta(s));
 
     if (items.length === 0) {
-      return <span className="text-slate-600 text-[11px]">{text}</span>;
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          <span>Sem alteração</span>
+        </span>
+      );
     }
 
     return (

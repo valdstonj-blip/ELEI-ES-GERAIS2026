@@ -682,26 +682,57 @@ export function exportLocaisPdf(
 /**
  * Exporta o Relatório de Ocorrências
  */
+function isSemAlteracaoFalta(text: string | undefined | null): boolean {
+  if (!text) return true;
+  const s = String(text).trim();
+  if (!s || s === '-' || s === '.' || s === '/' || s === '0' || s === '00') return true;
+
+  const norm = s
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!norm || norm === '0' || norm === 'OK') return true;
+
+  const termosSemFalta = [
+    'SEM ALTERACAO',
+    'SEM ALTERACOES',
+    'SEM ALTERAC',
+    'SEM FALTA',
+    'SEM FALTAS',
+    'NAO HOUVE',
+    'NAO HA',
+    'NENHUMA',
+    'NENHUM',
+    'NADA CONSTA',
+    'NADA A RELATAR',
+    'ZERO',
+    'NORMAL',
+    'TUDO NORMAL',
+    'TUDO OK',
+    'NO MOMENTO SEM ALTERACAO',
+    'NO MOMENTO SEM ALTERACOES',
+  ];
+
+  for (const t of termosSemFalta) {
+    if (norm === t || norm.includes(t)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function countPoliciaisInText(text: string | undefined): number {
   if (!text) return 0;
-  const s = text.trim().toLowerCase();
-  if (
-    !s ||
-    s.includes('sem alteração') ||
-    s.includes('sem alteracao') ||
-    s === 'não houve' ||
-    s === 'nao houve' ||
-    s === 'nenhuma' ||
-    s === 'nenhum' ||
-    s === 'ok' ||
-    s === '-'
-  ) {
-    return 0;
-  }
+  if (isSemAlteracaoFalta(text)) return 0;
   const items = text
     .split(/[;\r\n]+/)
     .map((item) => item.trim())
-    .filter((item) => item.length > 2);
+    .filter((item) => item.length > 2 && !isSemAlteracaoFalta(item));
   return items.length > 0 ? items.length : 1;
 }
 
