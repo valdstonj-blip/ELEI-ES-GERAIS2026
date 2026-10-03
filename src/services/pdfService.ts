@@ -133,6 +133,7 @@ export function exportLocaisPdf(
   if (filters?.statusFilter === 'DOMINGO') filtered = filtered.filter((l) => isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo));
   if (filters?.statusFilter === 'BLINDADO') filtered = filtered.filter((l) => isSim(l.blindado) || isSim(l.utilizacaoBlindado));
   if (filters?.statusFilter === 'DUPLICIDADES') filtered = filtered.filter((l) => l.isDuplicado);
+  if (filters?.statusFilter === 'ENERGIA_CABOS') filtered = filtered.filter((l) => Boolean(l.hasAlteracaoEnergia));
 
   const isObsVal = (l: LocalVotacao) => {
     const obs = (l.observacoes || l.observacao || '').trim();

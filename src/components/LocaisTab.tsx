@@ -22,6 +22,7 @@ import {
   CalendarCheck,
   CheckSquare,
   FileSpreadsheet,
+  Zap,
 } from 'lucide-react';
 import { LocalVotacao } from '../types';
 import { exportLocaisPdf } from '../services/pdfService';
@@ -51,6 +52,7 @@ export type LocaisStatusFilter =
   | 'DOMINGO'
   | 'BLINDADO'
   | 'ALTERACOES'
+  | 'ENERGIA_CABOS'
   | 'DUPLICIDADES';
 
 export const LocaisTab: React.FC<LocaisTabProps> = ({
@@ -67,12 +69,6 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
   const [itemsPerPage, setItemsPerPage] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLocal, setSelectedLocal] = useState<LocalVotacao | null>(null);
-
-  // Modal para colar ou importar CSV do Google Sheets
-  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
-  const [csvInputText, setCsvInputText] = useState('');
-  const [csvError, setCsvError] = useState<string | null>(null);
-  const [batchActionMsg, setBatchActionMsg] = useState<string | null>(null);
 
   // Modo de visualização de duplicidades: 'AGRUPADO' (tabela detalhada por conflito com linhas) ou 'TABELA' (tabela padrão)
   const [duplicidadeViewMode, setDuplicidadeViewMode] = useState<'AGRUPADO' | 'TABELA'>('AGRUPADO');
@@ -209,6 +205,10 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
     return baseLocais.filter(hasObservacao).length;
   }, [baseLocais]);
 
+  const totalComAlteracaoEnergia = useMemo(() => {
+    return baseLocais.filter((l) => Boolean(l.hasAlteracaoEnergia)).length;
+  }, [baseLocais]);
+
   const totalDuplicidadesFiltro = useMemo(() => {
     return baseLocais.filter((l) => l.isDuplicado).length;
   }, [baseLocais]);
@@ -284,6 +284,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
       if (statusFilter === 'DOMINGO' && !hasDomingoImp) return false;
       if (statusFilter === 'BLINDADO' && !(isSim(l.blindado) || isSim(l.utilizacaoBlindado))) return false;
       if (statusFilter === 'ALTERACOES' && !hasObservacao(l)) return false;
+      if (statusFilter === 'ENERGIA_CABOS' && !l.hasAlteracaoEnergia) return false;
       if (statusFilter === 'DUPLICIDADES' && !l.isDuplicado) return false;
 
       if (searchTerm) {
@@ -295,6 +296,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
         const cpa = (l.cpa || '').toLowerCase();
         const zona = String(l.numZona || l.zonaEleitoral || '');
         const obs = (l.observacoes || l.observacao || '').toLowerCase();
+        const altEnergia = (l.alteracaoEnergia || '').toLowerCase();
         if (
           !nome.includes(q) &&
           !endereco.includes(q) &&
@@ -302,7 +304,8 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
           !uop.includes(q) &&
           !cpa.includes(q) &&
           !zona.includes(q) &&
-          !obs.includes(q)
+          !obs.includes(q) &&
+          !altEnergia.includes(q)
         ) {
           return false;
         }
@@ -322,23 +325,6 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
-  };
-
-  // Alternância ágil pelo operador (clique direto na linha)
-  const handleToggleImplantada = (local: LocalVotacao, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!onUpdateLocais) return;
-    const next = !isSim(local.implantada);
-    const updated = locais.map((l) => (l.id === local.id ? { ...l, implantada: next } : l));
-    onUpdateLocais(updated);
-  };
-
-  const handleToggleDesmobilizada = (local: LocalVotacao, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!onUpdateLocais) return;
-    const next = !isSim(local.desmobilizada);
-    const updated = locais.map((l) => (l.id === local.id ? { ...l, desmobilizada: next } : l));
-    onUpdateLocais(updated);
   };
 
   return (
@@ -774,6 +760,46 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
         </div>
       </div>
 
+      {/* Alerta Operacional Especial: Locais com Registro de Alteração de Energia Elétrica / Cabos */}
+      {totalComAlteracaoEnergia > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-3.5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Zap className="w-5 h-5 text-amber-50 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                  Alterações de Energia Elétrica / Cabos: {totalComAlteracaoEnergia} {totalComAlteracaoEnergia === 1 ? 'Local' : 'Locais'} com Registro
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-200 text-amber-900 font-extrabold uppercase">
+                  Coluna Oficial
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-800 font-medium mt-0.5">
+                Coluna <code className="bg-amber-100/90 px-1 py-0.5 rounded font-mono font-bold text-amber-900">alteração_local_motivo_roubo_furto_cabo_energia</code> monitorada diretamente da planilha.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              onClick={() => {
+                setStatusFilter(statusFilter === 'ENERGIA_CABOS' ? 'TODOS' : 'ENERGIA_CABOS');
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'ENERGIA_CABOS'
+                  ? 'bg-amber-700 text-white shadow-xs ring-2 ring-amber-400'
+                  : 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>{statusFilter === 'ENERGIA_CABOS' ? 'Exibir Todos os Locais' : 'Filtrar Locais com Registro'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 3. QUADRO COMPARATIVO DIRETO POR CPA (1º AO 8º E CPP) */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-xs">
         <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-2">
@@ -1118,6 +1144,23 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
 
           <button
             onClick={() => {
+              setStatusFilter(statusFilter === 'ENERGIA_CABOS' ? 'TODOS' : 'ENERGIA_CABOS');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              statusFilter === 'ENERGIA_CABOS'
+                ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-400'
+                : totalComAlteracaoEnergia > 0
+                ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-400 font-black shadow-2xs'
+                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+            }`}
+          >
+            <Zap className={`w-3.5 h-3.5 ${totalComAlteracaoEnergia > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-500'}`} />
+            <span>Alt. Energia / Cabos ({totalComAlteracaoEnergia})</span>
+          </button>
+
+          <button
+            onClick={() => {
               setStatusFilter(statusFilter === 'DUPLICIDADES' ? 'TODOS' : 'DUPLICIDADES');
               setCurrentPage(1);
             }}
@@ -1362,8 +1405,9 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                               <th className="py-2 px-3 min-w-[200px]">ENDEREÇO</th>
                               <th className="py-2 px-2 whitespace-nowrap">BAIRRO / MUNICÍPIO</th>
                               <th className="py-2 px-2 text-center whitespace-nowrap">APTOS</th>
-                              <th className="py-2 px-2 text-center whitespace-nowrap">URNA IMPLANTADA</th>
-                              <th className="py-2 px-2 text-center whitespace-nowrap">DESMOBILIZAÇÃO</th>
+                              <th className="py-2 px-2 whitespace-nowrap bg-amber-100/60 text-amber-950">ALT. ENERGIA / CABO</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap bg-emerald-100/60 text-emerald-950" title="Sincronizado diretamente da Planilha Oficial">URNA IMPLANTADA</th>
+                              <th className="py-2 px-2 text-center whitespace-nowrap bg-blue-100/60 text-blue-950" title="Sincronizado diretamente da Planilha Oficial">DESMOBILIZAÇÃO</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-purple-100 bg-white">
@@ -1402,26 +1446,36 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                                 <td className="py-2.5 px-2 text-center font-mono text-slate-700">
                                   {(loc.qtdAptos || loc.totalEleitoresAptos || 0).toLocaleString('pt-BR')}
                                 </td>
+                                <td className="py-2.5 px-2 text-[11px]">
+                                  {loc.hasAlteracaoEnergia ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 font-bold max-w-[180px] truncate" title={loc.alteracaoEnergia}>
+                                      <Zap className="w-3 h-3 text-amber-600 shrink-0" />
+                                      <span className="truncate">{loc.alteracaoEnergia}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">-</span>
+                                  )}
+                                </td>
                                 <td className="py-2.5 px-2 text-center">
                                   {isSim(loc.implantada) ? (
-                                    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 select-none">
                                       <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                       SIM
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400 select-none">
                                       NÃO
                                     </span>
                                   )}
                                 </td>
                                 <td className="py-2.5 px-2 text-center">
                                   {isSim(loc.desmobilizada) ? (
-                                    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200 select-none">
                                       <CheckCircle2 className="w-3 h-3 text-blue-600" />
                                       SIM
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400 select-none">
                                       NÃO
                                     </span>
                                   )}
@@ -1461,15 +1515,25 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">NECESSIDADE DE IMPLANTAÇÃO DA URNA NO DOMINGO</th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA(SIM/NÃO)</th>
                 <th className="py-2.5 px-2 min-w-[150px] bg-slate-900">OBSERVAÇÕS E ALTERAÇÕES</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-emerald-950">URNA IMPLANTADA</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-blue-950">DESMOBILIZAÇÃO.</th>
+                <th className="py-2.5 px-2 min-w-[180px] bg-amber-950 text-amber-200">
+                  <div className="flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>ALT. ENERGIA / CABOS</span>
+                  </div>
+                </th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-emerald-950 text-emerald-200" title="Sincronizado diretamente da Planilha Oficial">
+                  URNA IMPLANTADA
+                </th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-blue-950 text-blue-200" title="Sincronizado diretamente da Planilha Oficial">
+                  DESMOBILIZAÇÃO.
+                </th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100">
               {paginatedLocais.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-slate-400">
+                  <td colSpan={16} className="py-12 text-center text-slate-400">
                     Nenhum local de votação encontrado com os critérios aplicados.
                   </td>
                 </tr>
@@ -1647,37 +1711,54 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                         )}
                       </td>
 
-                      {/* 15. URNA IMPLANTADA */}
+                      {/* 13. ALTERAÇÃO ENERGIA / FURTO DE CABOS */}
+                      <td className="py-2.5 px-2 text-[11px]">
+                        {loc.hasAlteracaoEnergia ? (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLocal(loc);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-950 font-bold max-w-[280px] shadow-2xs transition-colors cursor-pointer"
+                            title="Clique para abrir e ler a alteração de energia/furto de cabos"
+                          >
+                            <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0 animate-pulse" />
+                            <span className="truncate">{loc.alteracaoEnergia}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+
+                      {/* 15. URNA IMPLANTADA (Dado Oficial da Planilha) */}
                       <td
-                        onClick={(e) => handleToggleImplantada(loc, e)}
                         className="py-2.5 px-2 text-center"
-                        title="Clique para alternar status de implantação"
+                        title={isSim(loc.implantada) ? 'Urna Implantada: SIM (Planilha Oficial)' : 'Urna Implantada: NÃO (Planilha Oficial)'}
                       >
                         {isSim(loc.implantada) ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs select-none">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             SIM
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200 select-none">
                             NÃO
                           </span>
                         )}
                       </td>
 
-                      {/* 16. DESMOBILIZAÇÃO. */}
+                      {/* 16. DESMOBILIZAÇÃO. (Dado Oficial da Planilha) */}
                       <td
-                        onClick={(e) => handleToggleDesmobilizada(loc, e)}
                         className="py-2.5 px-2 text-center"
-                        title="Clique para alternar status de desmobilização"
+                        title={isSim(loc.desmobilizada) ? 'Desmobilização: SIM (Planilha Oficial)' : 'Desmobilização: NÃO (Planilha Oficial)'}
                       >
                         {isSim(loc.desmobilizada) ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs select-none">
                             <CheckCircle2 className="w-3 h-3 text-blue-600" />
                             SIM
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200 select-none">
                             NÃO
                           </span>
                         )}
@@ -1777,7 +1858,51 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                   Blindado: <strong>{selectedLocal.blindado || selectedLocal.utilizacaoBlindado ? 'SIM' : 'NÃO'}</strong>
                 </p>
               </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 font-bold block uppercase flex items-center justify-between">
+                  <span>Planilha Oficial</span>
+                  <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Sincronizado da Planilha</span>
+                </span>
+                <div className="mt-1 space-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Urna Implantada:</span>
+                    <strong className={isSim(selectedLocal.implantada) ? 'text-emerald-700 font-black' : 'text-slate-400'}>
+                      {isSim(selectedLocal.implantada) ? 'SIM' : 'NÃO'}
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Desmobilização:</span>
+                    <strong className={isSim(selectedLocal.desmobilizada) ? 'text-blue-700 font-black' : 'text-slate-400'}>
+                      {isSim(selectedLocal.desmobilizada) ? 'SIM' : 'NÃO'}
+                    </strong>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* Alerta de Alteração de Energia / Furto de Cabos */}
+            {selectedLocal.hasAlteracaoEnergia && (
+              <div className="p-3.5 bg-amber-50 rounded-xl border-2 border-amber-400 text-xs space-y-1.5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-amber-950 font-black uppercase text-[11px]">
+                    <Zap className="w-4 h-4 text-amber-600 animate-pulse" />
+                    <span>Registro de Alteração de Energia Elétrica / Cabos</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 uppercase">
+                    Coluna Oficial
+                  </span>
+                </div>
+                <div className="p-3 bg-white/95 rounded-lg border border-amber-300 text-amber-950 font-bold text-xs leading-relaxed whitespace-pre-wrap">
+                  {selectedLocal.alteracaoEnergia}
+                </div>
+                {selectedLocal.linhaPlanilha && (
+                  <p className="text-[10px] text-amber-800 font-semibold">
+                    📍 Registro na <strong>Linha {selectedLocal.linhaPlanilha}</strong> da planilha do Google Sheets.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Alerta de Duplicidade no Modal */}
             {selectedLocal.isDuplicado && (

@@ -126,8 +126,59 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
       const keyObs = Object.keys(row).find((k) => k.toUpperCase().includes('OBS'));
       const observacoes = String(keyObs ? row[keyObs] : (row['OBSERVAÇÕS E ALTERAÇÕES'] || row['OBSERVAÇÕES E ALTERAÇÕES'] || '')).trim();
 
-      // Busca flexível e inteligente pela coluna URNA / URNAS IMPLANTADA(S)
       const allRowKeys = Object.keys(row);
+
+      // Busca flexível pela coluna de ALTERAÇÃO DE ENERGIA ELÉTRICA / FURTO DE CABOS
+      const keyEnergia = allRowKeys.find((k) => {
+        const norm = k
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^A-Z0-9]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        return (
+          (norm.includes('ENERGIA') && (norm.includes('ALTERA') || norm.includes('CABO') || norm.includes('FURTO') || norm.includes('ROUBO') || norm.includes('ELETRIC') || norm.includes('RELACION'))) ||
+          norm.includes('ROUBO FURTO CABO') ||
+          norm.includes('FURTO CABO') ||
+          norm.includes('FALTA DE ENERGIA') ||
+          norm.includes('ALTERACAO LOCAL MOTIVO ROUBO FURTO CABO ENERGIA')
+        );
+      });
+
+      let alteracaoEnergiaRaw = keyEnergia ? row[keyEnergia] : (
+        row['LOCAL TEVE ALTERAÇÃO COM RELAÇÃO A ENERGIA ELÉTRICA.( INFORME SE HOUVE ALGO RELACIONADO)'] ||
+        row['alteração_local_motivo_roubo_furto_cabo_energia'] ||
+        row['ALTERACAO_LOCAL_MOTIVO_ROUBO_FURTO_CABO_ENERGIA'] ||
+        row['ALTERAÇÃO DE ENERGIA'] ||
+        row['ENERGIA ELETRICA'] ||
+        ''
+      );
+
+      // Fallback posicional se houver 21 colunas: coluna de índice 18 (19ª coluna)
+      if (!alteracaoEnergiaRaw && allRowKeys.length >= 21) {
+        const cand = row[allRowKeys[18]];
+        if (cand !== undefined && cand !== null && typeof cand === 'string' && cand.trim().length > 0) {
+          alteracaoEnergiaRaw = cand;
+        }
+      }
+
+      const alteracaoEnergia = String(alteracaoEnergiaRaw || '').trim();
+      const lowerEnergia = alteracaoEnergia.toLowerCase();
+      const hasAlteracaoEnergia = (
+        alteracaoEnergia.length > 0 &&
+        alteracaoEnergia !== '-' &&
+        lowerEnergia !== 'não' &&
+        lowerEnergia !== 'nao' &&
+        lowerEnergia !== 'sem alteração' &&
+        lowerEnergia !== 'sem alteracao' &&
+        lowerEnergia !== 'nada consta' &&
+        lowerEnergia !== 'ok' &&
+        lowerEnergia !== 'normal'
+      );
+
+      // Busca flexível e inteligente pela coluna URNA / URNAS IMPLANTADA(S)
       const keyImplantada = allRowKeys.find((k) => {
         const norm = k
           .toUpperCase()
@@ -137,8 +188,8 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
           .replace(/\s+/g, ' ')
           .trim();
 
-        // NUNCA confundir com colunas de blindado, domingo ou necessidade de planejamento
-        if (norm.includes('DOMINGO') || norm.includes('NECESSIDADE') || norm.includes('BLINDADO')) return false;
+        // NUNCA confundir com colunas de blindado, domingo, energia ou necessidade de planejamento
+        if (norm.includes('DOMINGO') || norm.includes('NECESSIDADE') || norm.includes('BLINDADO') || norm.includes('ENERGIA') || norm.includes('CABO')) return false;
         if (norm.includes('DESMOBILIZ') || norm.includes('DESMOB') || norm.includes('RECOLHI')) return false;
 
         return (
@@ -178,17 +229,22 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
       let desmobilizadaRaw = keyDesmobilizada ? row[keyDesmobilizada] : (row['DESMOBILIZAÇÃO.'] || row['DESMOBILIZAÇÃO'] || row['DESMOBILIZAÇÃO DO LOCAL DE VOTAÇÃO'] || row['DESMOBILIZADA']);
 
       // Fallbacks posicionais caso o cabeçalho não case:
-      // Formato 16 colunas: Coluna 15 = índice 14 (URNA IMPLANTADA), Coluna 16 = índice 15 (DESMOBILIZAÇÃO)
+      // Formato 21 colunas: Coluna 20 = índice 19 (URNA IMPLANTADA), Coluna 21 = índice 20 (DESMOBILIZAÇÃO)
       // Formato 20 colunas: Coluna 19 = índice 18, Coluna 20 = índice 19
+      // Formato 16 colunas: Coluna 15 = índice 14, Coluna 16 = índice 15
       if (implantadaRaw === undefined || implantadaRaw === null || implantadaRaw === '') {
-        if (allRowKeys.length >= 19 && row[allRowKeys[18]] !== undefined) {
+        if (allRowKeys.length >= 21 && row[allRowKeys[19]] !== undefined) {
+          implantadaRaw = row[allRowKeys[19]];
+        } else if (allRowKeys.length >= 19 && row[allRowKeys[18]] !== undefined) {
           implantadaRaw = row[allRowKeys[18]];
         } else if (allRowKeys.length >= 15 && row[allRowKeys[14]] !== undefined) {
           implantadaRaw = row[allRowKeys[14]];
         }
       }
       if (desmobilizadaRaw === undefined || desmobilizadaRaw === null || desmobilizadaRaw === '') {
-        if (allRowKeys.length >= 20 && row[allRowKeys[19]] !== undefined) {
+        if (allRowKeys.length >= 21 && row[allRowKeys[20]] !== undefined) {
+          desmobilizadaRaw = row[allRowKeys[20]];
+        } else if (allRowKeys.length >= 20 && row[allRowKeys[19]] !== undefined) {
           desmobilizadaRaw = row[allRowKeys[19]];
         } else if (allRowKeys.length >= 16 && row[allRowKeys[15]] !== undefined) {
           desmobilizadaRaw = row[allRowKeys[15]];
@@ -222,6 +278,8 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
         efetivoSabado,
         efetivoDomingo,
         observacoes,
+        alteracaoEnergia,
+        hasAlteracaoEnergia,
         implantada: isImplantada,
         desmobilizada: isDesmobilizada,
         linhaPlanilha: physicalLine,

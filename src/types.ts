@@ -18,6 +18,8 @@ export interface LocalVotacao {
   efetivoSabado: number;
   efetivoDomingo: number;
   observacoes: string;
+  alteracaoEnergia?: string; // Registro da coluna de energia elétrica / furto ou roubo de cabos
+  hasAlteracaoEnergia?: boolean;
   implantada: boolean; // 'SIM' | 'NÃO' - Implantação realizada no dia
   desmobilizada: boolean; // 'SIM' | 'NÃO' - Desmobilização realizada ao término
   horaImplantacao?: string;
