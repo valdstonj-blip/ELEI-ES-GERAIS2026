@@ -24,6 +24,8 @@ import {
   Mail,
   Shield,
   FileCheck,
+  BarChart3,
+  ChevronUp,
 } from 'lucide-react';
 import { Ocorrencia } from '../types';
 import { exportOcorrenciasPdf, matchesCarimboDate } from '../services/pdfService';
@@ -176,6 +178,8 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
   // Filtro estrito de dias pelo Carimbo de Data/Hora (03OUT26 ou 04OUT26)
   const [selectedDay, setSelectedDay] = useState<'TODOS' | '03OUT' | '04OUT'>('TODOS');
   const [selectedCrimeFilter, setSelectedCrimeFilter] = useState<string>('TODOS');
+  const [selectedSpecificCrime, setSelectedSpecificCrime] = useState<string | null>(null);
+  const [showCrimesTable, setShowCrimesTable] = useState(false);
   const [selectedCpa, setSelectedCpa] = useState<string>('TODOS');
   const [selectedOpm, setSelectedOpm] = useState<string>('TODAS');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -204,7 +208,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
     return ['TODAS', ...Array.from(set).sort()];
   }, [ocorrencias]);
 
-  // Contagem para cada uma das 5 perguntas de múltipla escolha
+  // Contagem para cada uma das 5 perguntas de múltipla escolha + ocorrências sem crime categorizado (apenas dinâmica)
   const countsPerCrimeQuestion = useMemo(() => {
     const counts = {
       'Crimes comuns contra candidatos': 0,
@@ -212,29 +216,126 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
       'Crimes Eleitorais': 0,
       'Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação': 0,
       'Prisões/apreensões no entorno e/ou locais de votação': 0,
+      semCrimeComDinamica: 0,
     };
 
     ocorrencias.forEach((oc) => {
+      let teveCrime = false;
       if (!isNaoHouve(oc.crimesCandidatos)) {
         counts['Crimes comuns contra candidatos']++;
+        teveCrime = true;
       }
       if (!isNaoHouve(oc.crimesLocaisVotacao)) {
         counts['Crimes comuns nos locais de votação/apuração']++;
+        teveCrime = true;
       }
       if (!isNaoHouve(oc.crimesEleitorais)) {
         counts['Crimes Eleitorais']++;
+        teveCrime = true;
       }
       if (!isNaoHouve(oc.incidentesSeguranca)) {
         counts[
           'Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação'
         ]++;
+        teveCrime = true;
       }
       if (!isNaoHouve(oc.prisoesApreensoes)) {
         counts['Prisões/apreensões no entorno e/ou locais de votação']++;
+        teveCrime = true;
+      }
+
+      if (!teveCrime) {
+        const d = (oc.dinamica || oc.historico || '').trim();
+        if (d && !isNaoHouve(d) && d.length > 3) {
+          counts.semCrimeComDinamica++;
+        }
       }
     });
 
     return counts;
+  }, [ocorrencias]);
+
+  // Totalização de cada opção específica assinalada no formulário (apenas quem tem quantidade > 0)
+  const crimesBreakdown = useMemo(() => {
+    interface CrimeStat {
+      categoria: string;
+      crime: string;
+      count: number;
+    }
+    const map = new Map<string, CrimeStat>();
+    let countSemCrimeComDinamica = 0;
+
+    ocorrencias.forEach((o) => {
+      let teveCrime = false;
+
+      if (o.crimesCandidatos && !isNaoHouve(o.crimesCandidatos)) {
+        teveCrime = true;
+        const key = `Crimes comuns contra candidatos:::${o.crimesCandidatos.trim()}`;
+        const item = map.get(key) || { categoria: 'Crimes comuns contra candidatos', crime: o.crimesCandidatos.trim(), count: 0 };
+        item.count += 1;
+        map.set(key, item);
+      }
+      if (o.crimesLocaisVotacao && !isNaoHouve(o.crimesLocaisVotacao)) {
+        teveCrime = true;
+        const key = `Crimes comuns nos locais de votação/apuração:::${o.crimesLocaisVotacao.trim()}`;
+        const item = map.get(key) || { categoria: 'Crimes comuns nos locais de votação/apuração', crime: o.crimesLocaisVotacao.trim(), count: 0 };
+        item.count += 1;
+        map.set(key, item);
+      }
+      if (o.crimesEleitorais && !isNaoHouve(o.crimesEleitorais)) {
+        teveCrime = true;
+        const key = `Crimes Eleitorais:::${o.crimesEleitorais.trim()}`;
+        const item = map.get(key) || { categoria: 'Crimes Eleitorais', crime: o.crimesEleitorais.trim(), count: 0 };
+        item.count += 1;
+        map.set(key, item);
+      }
+      if (o.incidentesSeguranca && !isNaoHouve(o.incidentesSeguranca)) {
+        teveCrime = true;
+        const key = `Ocorrências e Incidentes de Segurança Pública:::${o.incidentesSeguranca.trim()}`;
+        const item = map.get(key) || { categoria: 'Ocorrências e Incidentes de Segurança Pública', crime: o.incidentesSeguranca.trim(), count: 0 };
+        item.count += 1;
+        map.set(key, item);
+      }
+      if (o.prisoesApreensoes && !isNaoHouve(o.prisoesApreensoes)) {
+        teveCrime = true;
+        const key = `Prisões/apreensões no entorno/locais:::${o.prisoesApreensoes.trim()}`;
+        const item = map.get(key) || { categoria: 'Prisões/apreensões no entorno/locais', crime: o.prisoesApreensoes.trim(), count: 0 };
+        item.count += 1;
+        map.set(key, item);
+      }
+
+      if (!teveCrime && o.crimesRegistrados && o.crimesRegistrados.length > 0) {
+        o.crimesRegistrados.forEach((c) => {
+          if (!isNaoHouve(c)) {
+            teveCrime = true;
+            const key = `Crimes Registrados no Pleito:::${c.trim()}`;
+            const item = map.get(key) || { categoria: 'Crimes Registrados no Pleito', crime: c.trim(), count: 0 };
+            item.count += 1;
+            map.set(key, item);
+          }
+        });
+      }
+
+      if (!teveCrime) {
+        const d = (o.dinamica || o.historico || '').trim();
+        if (d && !isNaoHouve(d) && d.length > 3) {
+          countSemCrimeComDinamica += 1;
+        }
+      }
+    });
+
+    const list = Array.from(map.values()).sort(
+      (a, b) => b.count - a.count || a.categoria.localeCompare(b.categoria)
+    );
+    const totalCrimes = list.reduce((sum, item) => sum + item.count, 0);
+    const totalGeral = totalCrimes + countSemCrimeComDinamica;
+
+    return {
+      list,
+      countSemCrimeComDinamica,
+      totalCrimes,
+      totalGeral,
+    };
   }, [ocorrencias]);
 
   // Indicadores de Resumo Gerais
@@ -291,8 +392,31 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
           !isNaoHouve(oc.prisoesApreensoes)
         ) {
           hasCrime = true;
+        } else if (selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA') {
+          const hasAnyCrime =
+            !isNaoHouve(oc.crimesCandidatos) ||
+            !isNaoHouve(oc.crimesLocaisVotacao) ||
+            !isNaoHouve(oc.crimesEleitorais) ||
+            !isNaoHouve(oc.incidentesSeguranca) ||
+            !isNaoHouve(oc.prisoesApreensoes) ||
+            (oc.crimesRegistrados && oc.crimesRegistrados.some((c) => !isNaoHouve(c)));
+          const d = (oc.dinamica || oc.historico || '').trim();
+          hasCrime = !hasAnyCrime && Boolean(d && !isNaoHouve(d) && d.length > 3);
         }
         if (!hasCrime) return false;
+      }
+
+      // Filtro específico por tipificação
+      if (selectedSpecificCrime) {
+        const target = selectedSpecificCrime.toLowerCase();
+        const matchesSpecific =
+          oc.crimesCandidatos?.toLowerCase() === target ||
+          oc.crimesLocaisVotacao?.toLowerCase() === target ||
+          oc.crimesEleitorais?.toLowerCase() === target ||
+          oc.incidentesSeguranca?.toLowerCase() === target ||
+          oc.prisoesApreensoes?.toLowerCase() === target ||
+          (oc.crimesRegistrados || []).some((c) => c.toLowerCase() === target);
+        if (!matchesSpecific) return false;
       }
 
       // Filtro de Dia focado no Carimbo de Data e Hora e no Serviço do Dia
@@ -436,24 +560,38 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               <span>Categorias Oficiais do Formulário Eleitoral</span>
             </h3>
             <p className="text-[11px] text-slate-500">
-              Respostas registradas nas 5 perguntas oficiais de múltipla escolha. Clique em qualquer categoria para filtrar a tabela:
+              Respostas registradas nas perguntas oficiais do formulário. Clique em qualquer categoria para filtrar a tabela:
             </p>
           </div>
-          {selectedCrimeFilter !== 'TODOS' && (
+
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                setSelectedCrimeFilter('TODOS');
-                setCurrentPage(1);
-              }}
-              className="text-xs text-blue-600 hover:underline font-bold self-start sm:self-auto cursor-pointer flex items-center gap-1"
+              onClick={() => setShowCrimesTable(!showCrimesTable)}
+              className="px-2.5 py-1 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Exibir ou recolher tabela consolidada com a contagem de cada crime assinalado"
             >
-              <X className="w-3.5 h-3.5" />
-              <span>Limpar Filtro ({selectedCrimeFilter})</span>
+              <BarChart3 className="w-3.5 h-3.5 text-blue-600" />
+              <span>{showCrimesTable ? 'Ocultar Tabela' : `Ver Totalização por Tipificação (${crimesBreakdown.totalGeral})`}</span>
+              {showCrimesTable ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
             </button>
-          )}
+
+            {(selectedCrimeFilter !== 'TODOS' || selectedSpecificCrime) && (
+              <button
+                onClick={() => {
+                  setSelectedCrimeFilter('TODOS');
+                  setSelectedSpecificCrime(null);
+                  setCurrentPage(1);
+                }}
+                className="text-xs text-blue-600 hover:underline font-bold self-start sm:self-auto cursor-pointer flex items-center gap-1"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Limpar Filtro ({selectedSpecificCrime || selectedCrimeFilter})</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
           {CRIMES_FORMULARIO.map((cat) => {
             const count = countsPerCrimeQuestion[cat.id as keyof typeof countsPerCrimeQuestion] || 0;
             const isSelected = selectedCrimeFilter === cat.id;
@@ -463,6 +601,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                 key={cat.id}
                 onClick={() => {
                   setSelectedCrimeFilter(isSelected ? 'TODOS' : cat.id);
+                  setSelectedSpecificCrime(null);
                   setCurrentPage(1);
                 }}
                 className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
@@ -489,7 +628,178 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               </button>
             );
           })}
+
+          {/* Card para ocorrências que têm dinâmica narrada mas não escolheram crime específico */}
+          {crimesBreakdown.countSemCrimeComDinamica > 0 && (
+            <button
+              onClick={() => {
+                setSelectedCrimeFilter(
+                  selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA' ? 'TODOS' : 'SEM_CRIME_COM_DINAMICA'
+                );
+                setSelectedSpecificCrime(null);
+                setCurrentPage(1);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA'
+                  ? 'bg-amber-50/90 border-amber-500 ring-2 ring-amber-500/20 shadow-xs'
+                  : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200'
+              }`}
+            >
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold text-amber-700 uppercase block truncate">
+                  Apenas Dinâmica
+                </span>
+                <span className="text-xs font-semibold text-slate-800 line-clamp-1">
+                  Sem crime tipificado
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded-md text-xs font-black shrink-0 bg-amber-100 text-amber-800 border border-amber-200">
+                {crimesBreakdown.countSemCrimeComDinamica}
+              </span>
+            </button>
+          )}
         </div>
+
+        {/* Tabela de Totalização Consolidada das Tipificações (Expandível para não poluir a tela) */}
+        {showCrimesTable && (
+          <div className="pt-2.5 border-t border-slate-100 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <BarChart3 className="w-3.5 h-3.5 text-blue-600" />
+                <span>Totalização Consolidada das Tipificações Assinaladas no Pleito:</span>
+              </span>
+              {selectedSpecificCrime && (
+                <button
+                  onClick={() => {
+                    setSelectedSpecificCrime(null);
+                    setCurrentPage(1);
+                  }}
+                  className="text-xs text-blue-600 hover:underline font-bold flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Remover filtro de tipificação ({selectedSpecificCrime})</span>
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-800 text-white font-bold text-[11px]">
+                  <tr>
+                    <th className="py-2 px-3">Categoria Oficial do Formulário</th>
+                    <th className="py-2 px-3">Tipificação do Crime / Registro Assinalado</th>
+                    <th className="py-2 px-3 text-center">Quantidade</th>
+                    <th className="py-2 px-3 text-center">% do Total</th>
+                    <th className="py-2 px-3 text-center">Filtro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {crimesBreakdown.list.map((item, idx) => {
+                    const isFiltered = selectedSpecificCrime === item.crime;
+                    const pct =
+                      crimesBreakdown.totalGeral > 0
+                        ? ((item.count / crimesBreakdown.totalGeral) * 100).toFixed(1) + '%'
+                        : '-';
+
+                    return (
+                      <tr
+                        key={idx}
+                        className={`transition-colors ${
+                          isFiltered ? 'bg-blue-50/90 font-bold' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <td className="py-2 px-3 text-slate-600 font-medium">
+                          {item.categoria}
+                        </td>
+                        <td className="py-2 px-3 text-slate-900 font-semibold">
+                          {item.crime}
+                        </td>
+                        <td className="py-2 px-3 text-center font-bold text-red-600 text-sm">
+                          {item.count}
+                        </td>
+                        <td className="py-2 px-3 text-center text-slate-500 font-mono">
+                          {pct}
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <button
+                            onClick={() => {
+                              setSelectedSpecificCrime(isFiltered ? null : item.crime);
+                              setCurrentPage(1);
+                            }}
+                            className={`px-2 py-0.5 text-[10px] font-bold rounded border transition-colors cursor-pointer ${
+                              isFiltered
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {isFiltered ? 'Remover' : 'Filtrar'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {crimesBreakdown.countSemCrimeComDinamica > 0 && (
+                    <tr
+                      className={`transition-colors ${
+                        selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA'
+                          ? 'bg-amber-50/90 font-bold'
+                          : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <td className="py-2 px-3 text-amber-800 font-medium">
+                        Ocorrência sem Crime Tipificado
+                      </td>
+                      <td className="py-2 px-3 text-slate-800 italic">
+                        Registros com dinâmica/fato narrado (sem seleção de crime categorizado)
+                      </td>
+                      <td className="py-2 px-3 text-center font-bold text-amber-700 text-sm">
+                        {crimesBreakdown.countSemCrimeComDinamica}
+                      </td>
+                      <td className="py-2 px-3 text-center text-slate-500 font-mono">
+                        {crimesBreakdown.totalGeral > 0
+                          ? ((crimesBreakdown.countSemCrimeComDinamica / crimesBreakdown.totalGeral) * 100).toFixed(1) + '%'
+                          : '-'}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        <button
+                          onClick={() => {
+                            setSelectedCrimeFilter(
+                              selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA'
+                                ? 'TODOS'
+                                : 'SEM_CRIME_COM_DINAMICA'
+                            );
+                            setSelectedSpecificCrime(null);
+                            setCurrentPage(1);
+                          }}
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded border transition-colors cursor-pointer ${
+                            selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-slate-100 hover:bg-amber-50 hover:text-amber-800 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA' ? 'Remover' : 'Filtrar'}
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot className="bg-slate-100 text-slate-900 font-bold text-[11px] border-t border-slate-200">
+                  <tr>
+                    <td colSpan={2} className="py-2 px-3 uppercase tracking-wider">
+                      Total Geral de Fatos e Ocorrências Registradas
+                    </td>
+                    <td className="py-2 px-3 text-center text-red-700 text-sm">
+                      {crimesBreakdown.totalGeral}
+                    </td>
+                    <td className="py-2 px-3 text-center">100%</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. BARRA DE FERRAMENTAS: BUSCA, FILTROS DE DATA (03OUT / 04OUT), CPA, OPM E PDF */}
@@ -629,7 +939,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                       dia: selectedDay,
                       cpa: selectedCpa,
                       opm: selectedOpm,
-                      crimeFilter: selectedCrimeFilter,
+                      crimeFilter: 'TODOS',
                       search: searchTerm,
                     })
                   }
@@ -676,14 +986,14 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                             dia: '03OUT',
                             cpa: selectedCpa,
                             opm: selectedOpm,
-                            crimeFilter: selectedCrimeFilter,
+                            crimeFilter: 'TODOS',
                             search: searchTerm,
                           });
                           setPdfDropdownOpen(false);
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">PDF 03OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF 03OUT26 (Todas Categorias) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
                           03/10
                         </span>
@@ -694,14 +1004,14 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                             dia: '04OUT',
                             cpa: selectedCpa,
                             opm: selectedOpm,
-                            crimeFilter: selectedCrimeFilter,
+                            crimeFilter: 'TODOS',
                             search: searchTerm,
                           });
                           setPdfDropdownOpen(false);
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">PDF 04OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF 04OUT26 (Todas Categorias) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
                           04/10
                         </span>
@@ -712,19 +1022,42 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                             dia: 'TODOS',
                             cpa: selectedCpa,
                             opm: selectedOpm,
-                            crimeFilter: selectedCrimeFilter,
+                            crimeFilter: 'TODOS',
                             search: searchTerm,
                           });
                           setPdfDropdownOpen(false);
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">Todos os Dias {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF Geral (Todas Categorias) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono shrink-0 ml-1">
-                          Filtrado
+                          Geral
                         </span>
                       </button>
                     </div>
+
+                    {selectedCrimeFilter !== 'TODOS' && (
+                      <div className="py-1 border-t border-slate-100 bg-amber-50/50">
+                        <button
+                          onClick={() => {
+                            exportOcorrenciasPdf(ocorrencias, {
+                              dia: selectedDay,
+                              cpa: selectedCpa,
+                              opm: selectedOpm,
+                              crimeFilter: selectedCrimeFilter,
+                              search: searchTerm,
+                            });
+                            setPdfDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs text-amber-900 hover:bg-amber-100 flex items-center justify-between font-bold cursor-pointer"
+                        >
+                          <span className="truncate">PDF Filtrado: {selectedCrimeFilter}</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-mono shrink-0 ml-1">
+                            Filtro
+                          </span>
+                        </button>
+                      </div>
+                    )}
 
                     {(selectedCpa !== 'TODOS' || selectedOpm !== 'TODAS') && (
                       <div className="py-1 bg-slate-50/50">

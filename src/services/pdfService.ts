@@ -956,13 +956,345 @@ export function exportOcorrenciasPdf(
   else fileParts.push('GERAL');
   const filename = `${fileParts.filter(Boolean).join('_').replace(/__+/g, '_')}.pdf`;
 
+  // 1. Totalização Executiva dos Crimes Assinalados e Ocorrências com Dinâmica
+  interface CrimeStatItem {
+    categoria: string;
+    crime: string;
+    count: number;
+  }
+
+  const crimeCountsMap = new Map<string, CrimeStatItem>();
+  let countSemCrimeComDinamica = 0;
+
+  filtered.forEach((o) => {
+    let teveCrimeCategorizado = false;
+
+    // 1. Crimes comuns contra candidatos
+    if (o.crimesCandidatos && !isNaoHouve(o.crimesCandidatos)) {
+      teveCrimeCategorizado = true;
+      const key = `Crimes comuns contra candidatos:::${o.crimesCandidatos.trim()}`;
+      const item = crimeCountsMap.get(key) || {
+        categoria: 'Crimes comuns contra candidatos',
+        crime: o.crimesCandidatos.trim(),
+        count: 0,
+      };
+      item.count += 1;
+      crimeCountsMap.set(key, item);
+    }
+
+    // 2. Crimes comuns nos locais de votação/apuração
+    if (o.crimesLocaisVotacao && !isNaoHouve(o.crimesLocaisVotacao)) {
+      teveCrimeCategorizado = true;
+      const key = `Crimes comuns nos locais de votação/apuração:::${o.crimesLocaisVotacao.trim()}`;
+      const item = crimeCountsMap.get(key) || {
+        categoria: 'Crimes comuns nos locais de votação/apuração',
+        crime: o.crimesLocaisVotacao.trim(),
+        count: 0,
+      };
+      item.count += 1;
+      crimeCountsMap.set(key, item);
+    }
+
+    // 3. Crimes Eleitorais
+    if (o.crimesEleitorais && !isNaoHouve(o.crimesEleitorais)) {
+      teveCrimeCategorizado = true;
+      const key = `Crimes Eleitorais:::${o.crimesEleitorais.trim()}`;
+      const item = crimeCountsMap.get(key) || {
+        categoria: 'Crimes Eleitorais',
+        crime: o.crimesEleitorais.trim(),
+        count: 0,
+      };
+      item.count += 1;
+      crimeCountsMap.set(key, item);
+    }
+
+    // 4. Incidentes de Segurança Pública
+    if (o.incidentesSeguranca && !isNaoHouve(o.incidentesSeguranca)) {
+      teveCrimeCategorizado = true;
+      const key = `Ocorrências e Incidentes de Segurança Pública:::${o.incidentesSeguranca.trim()}`;
+      const item = crimeCountsMap.get(key) || {
+        categoria: 'Ocorrências e Incidentes de Segurança Pública',
+        crime: o.incidentesSeguranca.trim(),
+        count: 0,
+      };
+      item.count += 1;
+      crimeCountsMap.set(key, item);
+    }
+
+    // 5. Prisões / Apreensões
+    if (o.prisoesApreensoes && !isNaoHouve(o.prisoesApreensoes)) {
+      teveCrimeCategorizado = true;
+      const key = `Prisões/apreensões no entorno e/ou locais:::${o.prisoesApreensoes.trim()}`;
+      const item = crimeCountsMap.get(key) || {
+        categoria: 'Prisões/apreensões no entorno e/ou locais',
+        crime: o.prisoesApreensoes.trim(),
+        count: 0,
+      };
+      item.count += 1;
+      crimeCountsMap.set(key, item);
+    }
+
+    // Fallback: crimesRegistrados
+    if (!teveCrimeCategorizado && o.crimesRegistrados && o.crimesRegistrados.length > 0) {
+      o.crimesRegistrados.forEach((c) => {
+        if (!isNaoHouve(c)) {
+          teveCrimeCategorizado = true;
+          const key = `Crimes Registrados no Pleito:::${c.trim()}`;
+          const item = crimeCountsMap.get(key) || {
+            categoria: 'Crimes Registrados no Pleito',
+            crime: c.trim(),
+            count: 0,
+          };
+          item.count += 1;
+          crimeCountsMap.set(key, item);
+        }
+      });
+    }
+
+    // Caso não tenha havido crime tipificado assinalado, verificar se enviou dinâmica
+    if (!teveCrimeCategorizado) {
+      const dinamicaTexto = (o.dinamica || o.historico || '').trim();
+      if (dinamicaTexto && !isNaoHouve(dinamicaTexto) && dinamicaTexto.length > 3) {
+        countSemCrimeComDinamica += 1;
+      }
+    }
+  });
+
+  const crimesQuantificados = Array.from(crimeCountsMap.values()).sort(
+    (a, b) => b.count - a.count || a.categoria.localeCompare(b.categoria)
+  );
+
+  const totalCrimesCategorizados = crimesQuantificados.reduce((sum, item) => sum + item.count, 0);
+  const totalFatosReportados = totalCrimesCategorizados + countSemCrimeComDinamica;
+
+  // Definir ordem oficial das categorias
+  const ORDEM_CATEGORIAS = [
+    'Crimes comuns contra candidatos',
+    'Crimes comuns nos locais de votação/apuração',
+    'Crimes Eleitorais',
+    'Ocorrências e Incidentes de Segurança Pública',
+    'Prisões/apreensões no entorno e/ou locais',
+    'Crimes Registrados no Pleito',
+  ];
+
+  // Agrupamento por Categoria Oficial
+  const crimesPorCategoria = new Map<string, CrimeStatItem[]>();
+
+  crimesQuantificados.forEach((item) => {
+    let catKey = item.categoria;
+    if (catKey.includes('Incidentes') || catKey.includes('Segurança Pública')) {
+      catKey = 'Ocorrências e Incidentes de Segurança Pública';
+    } else if (catKey.includes('Prisões') || catKey.includes('Apreensões')) {
+      catKey = 'Prisões/apreensões no entorno e/ou locais';
+    }
+    const arr = crimesPorCategoria.get(catKey) || [];
+    arr.push(item);
+    crimesPorCategoria.set(catKey, arr);
+  });
+
+  // Ordenar as categorias segundo a ordem oficial
+  const categoriasOrdenadas = Array.from(crimesPorCategoria.keys()).sort((a, b) => {
+    const idxA = ORDEM_CATEGORIAS.indexOf(a);
+    const idxB = ORDEM_CATEGORIAS.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  // Montagem das linhas da Tabela 1: Resumo Consolidado de Crimes e Fatos
+  const summaryRows: any[][] = [];
+
+  categoriasOrdenadas.forEach((categoriaNome) => {
+    const listaCrimes = crimesPorCategoria.get(categoriaNome) || [];
+    listaCrimes.sort((a, b) => b.count - a.count);
+    const subtotal = listaCrimes.reduce((sum, c) => sum + c.count, 0);
+    const subtotalPct =
+      totalFatosReportados > 0
+        ? ((subtotal / totalFatosReportados) * 100).toFixed(1) + '%'
+        : '-';
+
+    // 1. Linha de Título da Categoria com Subtotal (sem repetir a categoria em cada linha individual!)
+    summaryRows.push([
+      {
+        content: `▶ ${categoriaNome.toUpperCase()}`,
+        styles: {
+          fillColor: [241, 245, 249],
+          textColor: [15, 23, 42],
+          fontStyle: 'bold',
+          fontSize: 7.2,
+        },
+      },
+      {
+        content: `Subtotal: ${subtotal}`,
+        styles: {
+          fillColor: [241, 245, 249],
+          textColor: [185, 28, 28],
+          fontStyle: 'bold',
+          halign: 'center',
+          fontSize: 7.2,
+        },
+      },
+      {
+        content: subtotalPct,
+        styles: {
+          fillColor: [241, 245, 249],
+          textColor: [71, 85, 105],
+          fontStyle: 'bold',
+          halign: 'center',
+          fontSize: 7.2,
+        },
+      },
+    ]);
+
+    // 2. Linhas de cada crime sob esta categoria (apenas a tipificação indentada)
+    listaCrimes.forEach((c) => {
+      const pct =
+        totalFatosReportados > 0
+          ? ((c.count / totalFatosReportados) * 100).toFixed(1) + '%'
+          : '-';
+      summaryRows.push([
+        `    • ${c.crime}`,
+        c.count.toString(),
+        pct,
+      ]);
+    });
+  });
+
+  // 3. Grupo de Ocorrências com Dinâmica narrada mas sem crime categorizado
+  if (countSemCrimeComDinamica > 0) {
+    const pct =
+      totalFatosReportados > 0
+        ? ((countSemCrimeComDinamica / totalFatosReportados) * 100).toFixed(1) + '%'
+        : '-';
+
+    summaryRows.push([
+      {
+        content: '▶ OCORRÊNCIAS SEM CRIME TIPIFICADO (APENAS DINÂMICA DO FATO)',
+        styles: {
+          fillColor: [254, 243, 199], // amber 100
+          textColor: [146, 64, 14], // amber 800
+          fontStyle: 'bold',
+          fontSize: 7.2,
+        },
+      },
+      {
+        content: `Subtotal: ${countSemCrimeComDinamica}`,
+        styles: {
+          fillColor: [254, 243, 199],
+          textColor: [146, 64, 14],
+          fontStyle: 'bold',
+          halign: 'center',
+          fontSize: 7.2,
+        },
+      },
+      {
+        content: pct,
+        styles: {
+          fillColor: [254, 243, 199],
+          textColor: [146, 64, 14],
+          fontStyle: 'bold',
+          halign: 'center',
+          fontSize: 7.2,
+        },
+      },
+    ]);
+
+    summaryRows.push([
+      '    • Registros com dinâmica/fato narrado (sem seleção de crime categorizado)',
+      countSemCrimeComDinamica.toString(),
+      pct,
+    ]);
+  }
+
+  if (summaryRows.length === 0) {
+    summaryRows.push([
+      'Sem Alterações registradas para os filtros selecionados',
+      '0',
+      '0.0%',
+    ]);
+  }
+
+  const summaryFoot = [
+    [
+      'TOTAL GERAL DE FATOS E OCORRÊNCIAS REGISTRADAS',
+      totalFatosReportados.toString(),
+      '100.0%',
+    ],
+  ];
+
+  // =========================================================================
+  // 1. QUADRO RESUMO DE TOTALIZAÇÃO DE CRIMES E FATOS ENVIADOS
+  // =========================================================================
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text('1. TOTALIZAÇÃO CONSOLIDADA DE CRIMES E FATOS REGISTRADOS NO PLEITO', 10, 21.5);
+
+  autoTable(doc, {
+    startY: 23,
+    head: [
+      [
+        'Tipificação do Fato / Crime Registrado no Pleito (Planilha)',
+        'Quantidade',
+        '% do Total',
+      ],
+    ],
+    body: summaryRows,
+    foot: summaryFoot,
+    margin: { top: 23, bottom: 12, left: 10, right: 10 },
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.2,
+      halign: 'center',
+    },
+    footStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.2,
+    },
+    styles: {
+      fontSize: 6.8,
+      cellPadding: 1.8,
+      overflow: 'linebreak',
+      textColor: [30, 41, 59],
+      valign: 'middle',
+    },
+    columnStyles: {
+      0: { halign: 'left', cellWidth: 195 },
+      1: { halign: 'center', cellWidth: 42, fontStyle: 'bold', textColor: [185, 28, 28] },
+      2: { halign: 'center', cellWidth: 40 },
+    },
+  });
+
+  const summaryFinalY = (doc as any).lastAutoTable?.finalY || 60;
+  let analyticalStartY = summaryFinalY + 7;
+
+  // Se a tabela analítica for ficar muito espremida na primeira página, abre página nova
+  if (analyticalStartY > 160) {
+    doc.addPage();
+    analyticalStartY = 23;
+  }
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text('2. RELAÇÃO ANALÍTICA COMPLETA DAS TRANSMISSÕES (LINHA A LINHA DA PLANILHA)', 10, analyticalStartY - 1.8);
+
   const rows = filtered.length > 0 ? filtered.map((o) => {
     // Lista todos os crimes assinalados nas 5 perguntas da planilha
-    let crimesText = 'Não houve';
+    let crimesText = 'Sem crime tipificado';
     if (o.crimesRegistrados && o.crimesRegistrados.length > 0) {
       crimesText = o.crimesRegistrados.map((c) => `• ${c}`).join('\n');
-    } else if (o.seHouverOcorrenciaDizerQual && o.seHouverOcorrenciaDizerQual !== 'Não houve') {
+    } else if (o.seHouverOcorrenciaDizerQual && !isNaoHouve(o.seHouverOcorrenciaDizerQual)) {
       crimesText = `• ${o.seHouverOcorrenciaDizerQual}`;
+    } else {
+      const dinamicaTexto = (o.dinamica || o.historico || '').trim();
+      crimesText = (dinamicaTexto && !isNaoHouve(dinamicaTexto)) ? 'Não categorizado (apenas dinâmica)' : '-';
     }
 
     return [
@@ -991,7 +1323,7 @@ export function exportOcorrenciasPdf(
   ];
 
   autoTable(doc, {
-    startY: 23,
+    startY: analyticalStartY,
     head: [
       [
         'Carimbo Data/Hora',
