@@ -19,6 +19,9 @@ import {
   Eye,
   FileText,
   Clock,
+  BarChart3,
+  Table,
+  Filter,
 } from 'lucide-react';
 import { FaltaEfetivo } from '../types';
 import { exportFaltasPdf, matchesCarimboDate } from '../services/pdfService';
@@ -105,6 +108,118 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalFalta, setModalFalta] = useState<FaltaEfetivo | null>(null);
+
+  // Consolidação detalhada de Faltas por Comando Intermediário (CPA)
+  const cpaFaltasStats = useMemo(() => {
+    const standardComandos = [
+      '1º CPA',
+      '2º CPA',
+      '3º CPA',
+      '4º CPA',
+      '5º CPA',
+      '6º CPA',
+      '7º CPA',
+      '8º CPA',
+      'CPP',
+      'COE',
+      'CPE',
+    ];
+
+    const map: Record<
+      string,
+      {
+        comando: string;
+        totalFaltas: number;
+        totalEnvios: number;
+        semAlteracao: number;
+        comFaltas: number;
+        opmsComFaltas: string[];
+      }
+    > = {};
+
+    standardComandos.forEach((cmd) => {
+      map[cmd] = {
+        comando: cmd,
+        totalFaltas: 0,
+        totalEnvios: 0,
+        semAlteracao: 0,
+        comFaltas: 0,
+        opmsComFaltas: [],
+      };
+    });
+
+    faltas.forEach((f) => {
+      const cpaName = normalizeCpaName(f.comandoIntermediario || f.cpa || '');
+      if (!cpaName) return;
+
+      if (!map[cpaName]) {
+        map[cpaName] = {
+          comando: cpaName,
+          totalFaltas: 0,
+          totalEnvios: 0,
+          semAlteracao: 0,
+          comFaltas: 0,
+          opmsComFaltas: [],
+        };
+      }
+
+      // Se houver filtro de dia aplicado, respeita também no consolidado por CPA
+      if (selectedDay !== 'TODOS') {
+        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''}`;
+        if (!matchesCarimboDate(f.carimbo, selectedDay, fallbackText)) {
+          return;
+        }
+      }
+
+      const qtd = countPoliciaisInText(f.faltasPoe || f.motivo);
+      map[cpaName].totalEnvios += 1;
+      map[cpaName].totalFaltas += qtd;
+
+      if (qtd > 0) {
+        map[cpaName].comFaltas += 1;
+        const opmName = (f.opm || f.uopDestino || f.opmOrigem || '').trim();
+        if (opmName && !map[cpaName].opmsComFaltas.includes(opmName)) {
+          map[cpaName].opmsComFaltas.push(opmName);
+        }
+      } else {
+        map[cpaName].semAlteracao += 1;
+      }
+    });
+
+    return Object.values(map).sort((a, b) => {
+      const idxA = standardComandos.indexOf(a.comando);
+      const idxB = standardComandos.indexOf(b.comando);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.comando.localeCompare(b.comando);
+    });
+  }, [faltas, selectedDay]);
+
+  // Totais consolidados do quadro por CPA
+  const cpaTotals = useMemo(() => {
+    let faltasTot = 0;
+    let enviosTot = 0;
+    let semAltTot = 0;
+    let comFaltasTot = 0;
+    const allOpmsComFaltas = new Set<string>();
+
+    cpaFaltasStats.forEach((item) => {
+      faltasTot += item.totalFaltas;
+      enviosTot += item.totalEnvios;
+      semAltTot += item.semAlteracao;
+      comFaltasTot += item.comFaltas;
+      item.opmsComFaltas.forEach((opm) => allOpmsComFaltas.add(opm));
+    });
+
+    return {
+      faltasTot,
+      enviosTot,
+      semAltTot,
+      comFaltasTot,
+      opmsTot: allOpmsComFaltas.size,
+    };
+  }, [cpaFaltasStats]);
 
   const availableCpas = useMemo(() => {
     const set = new Set(
@@ -329,7 +444,84 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
         </div>
       </div>
 
-      {/* 1. BARRA DE FERRAMENTAS: BUSCA, FILTROS DE DIA (03OUT / 04OUT), CPA, OPM E PDF */}
+      {/* QUADRO RÁPIDO DE COMANDOS INTERMEDIÁRIOS (CPA) */}
+      <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-blue-700" />
+            <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
+              Comandos Intermediários (CPA)
+            </span>
+            {selectedCpa !== 'TODOS' && (
+              <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 text-rose-900 font-bold border border-rose-200">
+                Filtro: {selectedCpa}
+              </span>
+            )}
+          </div>
+          {selectedCpa !== 'TODOS' && (
+            <button
+              onClick={() => {
+                setSelectedCpa('TODOS');
+                setSelectedOpm('TODAS');
+                setCurrentPage(1);
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer"
+            >
+              Limpar Filtro
+            </button>
+          )}
+        </div>
+
+        {/* Grade de Botões dos Comandos Intermediários */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-1.5 text-xs">
+          {cpaFaltasStats.map((item) => {
+            const isSelected = selectedCpa === item.comando;
+            const hasFaltas = item.totalFaltas > 0;
+
+            return (
+              <button
+                key={item.comando}
+                onClick={() => {
+                  setSelectedCpa(isSelected ? 'TODOS' : item.comando);
+                  setSelectedOpm('TODAS');
+                  setCurrentPage(1);
+                }}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                  isSelected
+                    ? 'bg-blue-600 text-white border-blue-700 shadow-xs ring-2 ring-blue-400'
+                    : hasFaltas
+                    ? 'bg-rose-50 hover:bg-rose-100/80 border-rose-300 text-rose-950 shadow-2xs'
+                    : 'bg-slate-50 hover:bg-blue-50/50 text-slate-800 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className={`font-black text-xs truncate ${isSelected ? 'text-white' : hasFaltas ? 'text-rose-950' : 'text-slate-900'}`}>
+                    {item.comando}
+                  </span>
+                  {hasFaltas && !isSelected && (
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse shrink-0" />
+                  )}
+                </div>
+
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className={`text-base font-black font-mono ${
+                    isSelected ? 'text-white' : hasFaltas ? 'text-rose-700 font-black' : 'text-slate-500 font-bold'
+                  }`}>
+                    {item.totalFaltas}
+                  </span>
+                  <span className={`text-[10px] font-semibold ${
+                    isSelected ? 'text-blue-100' : hasFaltas ? 'text-rose-700 font-bold' : 'text-slate-400'
+                  }`}>
+                    {item.totalFaltas === 1 ? 'falta' : 'faltas'}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. BARRA DE FERRAMENTAS: BUSCA, FILTROS DE DIA (03OUT / 04OUT), CPA, OPM E PDF */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
           {/* Busca Rápida */}
@@ -567,7 +759,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
         </div>
       </div>
 
-      {/* 2. TABELA DE FALTAS COM LAYOUT LIMPO E ORGANIZADO */}
+      {/* 3. TABELA DE REGISTROS ANALÍTICOS (DETALHADO LINHA A LINHA DA PLANILHA) */}
       <div className="bg-white border border-slate-200/90 rounded-xl shadow-2xs overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[560px]">
           <table className="w-full text-left text-xs text-slate-700 border-collapse min-w-[1200px]">

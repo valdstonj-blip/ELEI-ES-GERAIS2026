@@ -10,6 +10,8 @@ function normalizeCpaName(raw: string): string {
   if (!raw) return '1º CPA';
   const upper = raw.trim().toUpperCase();
   if (upper.includes('CPP')) return 'CPP';
+  if (upper.includes('COE')) return 'COE';
+  if (upper.includes('CPE')) return 'CPE';
   const match = upper.match(/([1-8])/);
   if (match) return `${match[1]}º CPA`;
   return raw.trim();
@@ -1174,6 +1176,264 @@ export function exportFaltasPdf(
   doc.setTextColor(185, 28, 28);
   doc.text(`Total Policiais Faltosos: ${totalPoliciaisFaltosos}`, 175, 27);
 
+  // =========================================================================
+  // 1. TABELA RESUMO POR COMANDO (CPA)
+  // =========================================================================
+  const standardComandos = [
+    '1º CPA',
+    '2º CPA',
+    '3º CPA',
+    '4º CPA',
+    '5º CPA',
+    '6º CPA',
+    '7º CPA',
+    '8º CPA',
+    'CPP',
+    'COE',
+    'CPE',
+  ];
+
+  const cpaStatsMap: Record<
+    string,
+    {
+      comando: string;
+      totalFaltas: number;
+      totalEnvios: number;
+      semAlteracao: number;
+      comFaltas: number;
+    }
+  > = {};
+
+  const baseCpas = cpaFilter !== 'TODOS' ? [cpaFilter] : standardComandos;
+  baseCpas.forEach((cmd) => {
+    cpaStatsMap[cmd] = {
+      comando: cmd,
+      totalFaltas: 0,
+      totalEnvios: 0,
+      semAlteracao: 0,
+      comFaltas: 0,
+    };
+  });
+
+  // Estatísticas por OPM (qual OPM e quantidade de faltas por OPM)
+  const opmStatsMap: Record<
+    string,
+    {
+      opm: string;
+      comando: string;
+      totalFaltas: number;
+      totalEnvios: number;
+    }
+  > = {};
+
+  filtered.forEach((f) => {
+    const cpaName = normalizeCpaName(f.comandoIntermediario || f.cpa || '');
+    const opmName = (f.opm || f.uopDestino || f.opmOrigem || 'Não especificada').trim();
+    const qtd = countPoliciaisInText(f.faltasPoe || f.motivo);
+
+    // Contabilização CPA
+    if (cpaName) {
+      if (!cpaStatsMap[cpaName]) {
+        cpaStatsMap[cpaName] = {
+          comando: cpaName,
+          totalFaltas: 0,
+          totalEnvios: 0,
+          semAlteracao: 0,
+          comFaltas: 0,
+        };
+      }
+      cpaStatsMap[cpaName].totalEnvios += 1;
+      cpaStatsMap[cpaName].totalFaltas += qtd;
+      if (qtd > 0) {
+        cpaStatsMap[cpaName].comFaltas += 1;
+      } else {
+        cpaStatsMap[cpaName].semAlteracao += 1;
+      }
+    }
+
+    // Contabilização OPM
+    if (opmName) {
+      if (!opmStatsMap[opmName]) {
+        opmStatsMap[opmName] = {
+          opm: opmName,
+          comando: cpaName,
+          totalFaltas: 0,
+          totalEnvios: 0,
+        };
+      }
+      opmStatsMap[opmName].totalEnvios += 1;
+      opmStatsMap[opmName].totalFaltas += qtd;
+      if (cpaName && (!opmStatsMap[opmName].comando || opmStatsMap[opmName].comando === '1º CPA')) {
+        opmStatsMap[opmName].comando = cpaName;
+      }
+    }
+  });
+
+  const sortedCpaStats = Object.values(cpaStatsMap).sort((a, b) => {
+    const idxA = standardComandos.indexOf(a.comando);
+    const idxB = standardComandos.indexOf(b.comando);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.comando.localeCompare(b.comando);
+  });
+
+  const cpaSummaryRows = sortedCpaStats.map((item) => [
+    item.comando,
+    item.totalFaltas > 0 ? `${item.totalFaltas} falta(s)` : '0',
+  ]);
+
+  let cpaFaltasTot = 0;
+  let cpaEnviosTot = 0;
+  sortedCpaStats.forEach((c) => {
+    cpaFaltasTot += c.totalFaltas;
+    cpaEnviosTot += c.totalEnvios;
+  });
+
+  const cpaSummaryFoot = [
+    [
+      'TOTAL GERAL',
+      `${cpaFaltasTot} falta(s)`,
+    ],
+  ];
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+  doc.text('1. QUADRO RESUMO DE FALTAS POR CPA', 10, 34);
+
+  autoTable(doc, {
+    startY: 36,
+    head: [
+      [
+        'CPA',
+        'QUANTIDADE DE FALTAS',
+      ],
+    ],
+    body: cpaSummaryRows,
+    foot: cpaSummaryFoot,
+    margin: { top: 22, bottom: 12, left: 10, right: 10 },
+    theme: 'grid',
+    headStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 6.8,
+      halign: 'center',
+    },
+    footStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 6.8,
+      halign: 'center',
+    },
+    styles: {
+      fontSize: 6.2,
+      cellPadding: 1.2,
+      overflow: 'linebreak',
+      textColor: [30, 41, 59],
+      valign: 'middle',
+    },
+    columnStyles: {
+      0: { halign: 'left', fontStyle: 'bold', cellWidth: 160 },
+      1: { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28], cellWidth: 117 },
+    },
+  });
+
+  // =========================================================================
+  // 2. TABELA RESUMO POR OPM (QUAL OPM E QUANTIDADE DE FALTAS POR OPM)
+  // =========================================================================
+  const sortedOpmStats = Object.values(opmStatsMap).sort((a, b) => {
+    if (b.totalFaltas !== a.totalFaltas) {
+      return b.totalFaltas - a.totalFaltas;
+    }
+    return a.opm.localeCompare(b.opm);
+  });
+
+  const opmSummaryRows = sortedOpmStats.map((item) => [
+    item.opm,
+    item.comando || '-',
+    item.totalFaltas > 0 ? `${item.totalFaltas} falta(s)` : '0',
+  ]);
+
+  const opmTableStartY = ((doc as any).lastAutoTable?.finalY || 95) + 7;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let opmStartY = opmTableStartY;
+
+  if (opmStartY + 30 > pageHeight) {
+    doc.addPage();
+    opmStartY = 24;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+  doc.text('2. QUADRO RESUMO DE FALTAS POR OPM (BATALHÕES E UNIDADES)', 10, opmStartY);
+
+  autoTable(doc, {
+    startY: opmStartY + 2,
+    head: [
+      [
+        'OPM / UNIDADE POLICIAL',
+        'COMANDO (CPA)',
+        'QUANTIDADE DE FALTAS',
+      ],
+    ],
+    body: opmSummaryRows.length > 0 ? opmSummaryRows : [['Nenhuma OPM registrada', '-', '0']],
+    foot: [
+      [
+        'TOTAL GERAL',
+        `${sortedOpmStats.length} OPM(s)`,
+        `${cpaFaltasTot} falta(s)`,
+      ],
+    ],
+    margin: { top: 22, bottom: 12, left: 10, right: 10 },
+    theme: 'grid',
+    headStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 6.8,
+      halign: 'center',
+    },
+    footStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 6.8,
+      halign: 'center',
+    },
+    styles: {
+      fontSize: 6.2,
+      cellPadding: 1.2,
+      overflow: 'linebreak',
+      textColor: [30, 41, 59],
+      valign: 'middle',
+    },
+    columnStyles: {
+      0: { halign: 'left', fontStyle: 'bold', cellWidth: 120 },
+      1: { halign: 'center', fontStyle: 'bold', cellWidth: 77 },
+      2: { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28], cellWidth: 80 },
+    },
+  });
+
+  // =========================================================================
+  // 3. DETALHAMENTO ANALÍTICO COMPLETO DOS ENVIOS (LINHA A LINHA DA PLANILHA)
+  // =========================================================================
+  const opmTableFinalY = (doc as any).lastAutoTable?.finalY || 120;
+  let detailStartY = opmTableFinalY + 7;
+
+  if (detailStartY + 30 > pageHeight) {
+    doc.addPage();
+    detailStartY = 24;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+  doc.text('3. DETALHAMENTO ANALÍTICO DOS ENVIOS E IDENTIFICAÇÃO DOS POLICIAIS FALTOSOS', 10, detailStartY);
+
   // Linhas da tabela - Contendo a quantidade de faltas de cada linha enviada
   const rows = filtered.length > 0 ? filtered.map((f) => {
     const qtdFaltasLinha = countPoliciaisInText(f.faltasPoe || f.motivo);
@@ -1204,7 +1464,7 @@ export function exportFaltasPdf(
   ];
 
   autoTable(doc, {
-    startY: 33,
+    startY: detailStartY + 2,
     head: [
       [
         'Carimbo Data/Hora',
@@ -1219,7 +1479,7 @@ export function exportFaltasPdf(
       ],
     ],
     body: rows,
-    margin: { top: 33, bottom: 12, left: 10, right: 10 },
+    margin: { top: 22, bottom: 12, left: 10, right: 10 },
     theme: 'grid',
     headStyles: {
       fillColor: [30, 41, 59],

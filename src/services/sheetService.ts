@@ -610,6 +610,8 @@ export function normalizeCpaName(raw: string): string {
   if (!raw) return '1º CPA';
   const upper = raw.trim().toUpperCase();
   if (upper.includes('CPP')) return 'CPP';
+  if (upper.includes('COE')) return 'COE';
+  if (upper.includes('CPE')) return 'CPE';
   const match = upper.match(/([1-8])/);
   if (match) return `${match[1]}º CPA`;
   return raw.trim();

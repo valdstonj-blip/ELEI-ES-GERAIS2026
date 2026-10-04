@@ -240,25 +240,15 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
   // Indicadores de Resumo Gerais
   const stats = useMemo(() => {
     const total = ocorrencias.length;
-    let comCrime = 0;
-    let semAlteracao = 0;
     const opms = new Set<string>();
 
     ocorrencias.forEach((oc) => {
-      const crimes = getCrimesDaOcorrencia(oc);
-      if (crimes.length > 0) {
-        comCrime++;
-      } else {
-        semAlteracao++;
-      }
       const uop = oc.opm || oc.uop;
       if (uop) opms.add(uop);
     });
 
     return {
       total,
-      comCrime,
-      semAlteracao,
       opmsCount: opms.size,
     };
   }, [ocorrencias]);
@@ -365,11 +355,11 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
   return (
     <div id="ocorrencias-dashboard" className="space-y-3.5">
       {/* 0. CARDS DE RESUMO OPERACIONAL + STATUS DE CONEXÃO DIRETA */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-              Total de Envios
+              Total de Ocorrências / Registros
             </span>
             <FileSpreadsheet className="w-4 h-4 text-slate-400" />
           </div>
@@ -378,41 +368,24 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               {stats.total}
             </span>
             <span className="text-[10px] text-slate-500 block mt-0.5">
-              {stats.total === 1 ? '1 resposta na planilha' : `${stats.total} respostas na planilha`}
+              {stats.total === 1 ? '1 registro na planilha' : `${stats.total} registros na planilha`}
             </span>
           </div>
         </div>
 
-        <div className="bg-white border border-rose-200 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between bg-rose-50/20">
+        <div className="bg-white border border-indigo-200 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between bg-indigo-50/20">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wide">
-              Com Ocorrência / Fato
+            <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide">
+              OPMs com Informações
             </span>
-            <AlertTriangle className="w-4 h-4 text-rose-600" />
+            <Building2 className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="mt-1">
-            <span className="text-2xl font-black text-rose-700">
-              {stats.comCrime}
+            <span className="text-2xl font-black text-indigo-800">
+              {stats.opmsCount}
             </span>
-            <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
-              Incidentes ou crimes reportados
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-              Sem Alteração
-            </span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="mt-1">
-            <span className="text-2xl font-black text-slate-900">
-              {stats.semAlteracao}
-            </span>
-            <span className="text-[10px] text-slate-500 block mt-0.5">
-              Normalidade informada
+            <span className="text-[10px] text-indigo-600 font-semibold block mt-0.5">
+              Batalhões e unidades registradas
             </span>
           </div>
         </div>
@@ -972,10 +945,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                               ))}
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[11px] font-medium border border-slate-200">
-                              <CheckCircle2 className="w-3 h-3 text-slate-400" />
-                              <span>Não houve</span>
-                            </div>
+                            <span className="text-slate-400 text-[11px]">-</span>
                           )}
                         </td>
 
@@ -1060,27 +1030,27 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                       </td>
                       <td className="py-2.5 px-3 align-top">
                         <span className={`text-[11px] ${!isNaoHouve(oc.crimesCandidatos) ? 'font-bold text-amber-700' : 'text-slate-400'}`}>
-                          {oc.crimesCandidatos || 'Não houve'}
+                          {oc.crimesCandidatos || '-'}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 align-top">
                         <span className={`text-[11px] ${!isNaoHouve(oc.crimesLocaisVotacao) ? 'font-bold text-blue-700' : 'text-slate-400'}`}>
-                          {oc.crimesLocaisVotacao || 'Não houve'}
+                          {oc.crimesLocaisVotacao || '-'}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 align-top">
                         <span className={`text-[11px] ${!isNaoHouve(oc.crimesEleitorais) ? 'font-bold text-purple-700' : 'text-slate-400'}`}>
-                          {oc.crimesEleitorais || 'Não houve'}
+                          {oc.crimesEleitorais || '-'}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 align-top">
                         <span className={`text-[11px] ${!isNaoHouve(oc.incidentesSeguranca) ? 'font-bold text-sky-700' : 'text-slate-400'}`}>
-                          {oc.incidentesSeguranca || 'Não houve'}
+                          {oc.incidentesSeguranca || '-'}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 align-top">
                         <span className={`text-[11px] ${!isNaoHouve(oc.prisoesApreensoes) ? 'font-bold text-rose-700' : 'text-slate-400'}`}>
-                          {oc.prisoesApreensoes || 'Não houve'}
+                          {oc.prisoesApreensoes || '-'}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 align-top">
