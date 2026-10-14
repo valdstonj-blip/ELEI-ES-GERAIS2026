@@ -121,6 +121,7 @@ export interface FaltaEfetivo {
   opm?: string;
   faltasPoe?: string;
   dispensasPoe?: string;
+  email?: string;
 }
 
 export interface SheetConfig {
@@ -132,4 +133,4 @@ export interface SheetConfig {
   lastUpdated?: string | null;
 }
 
-export type ActiveTab = 'locais' | 'ocorrencias' | 'faltas';
+export type ActiveTab = 'locais' | 'ocorrencias' | 'faltas' | 'verificacao';

@@ -728,84 +728,92 @@ function isSemAlteracaoFalta(text: string | undefined | null): boolean {
   return false;
 }
 
+function isStructuralHeader(line: string): boolean {
+  const upper = line.toUpperCase().trim();
+  if (!upper) return true;
+  if (/^[0-9]+[ªº°]\s*CIA/i.test(upper) || /^CIA\b/i.test(upper) || /^SEDE\b/i.test(upper)) return true;
+  if (/^(I|II|III|IV|V|\d+)\s*[-–—]\s*(FALTAS?|ATRASOS?|DISPENSAS?)/i.test(upper)) return true;
+  if (/^(S\/|SEM\s+)ALTERAÇ/i.test(upper) || /^NÃO\s+HOUVE/i.test(upper) || upper === '-' || upper === 'NADA CONSTA') return true;
+  return false;
+}
+
 function countPoliciaisInText(text: string | undefined): number {
   if (!text) return 0;
   if (isSemAlteracaoFalta(text)) return 0;
+
+  const lines = text
+    .split(/[\r\n]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 2 && !isStructuralHeader(item) && !isSemAlteracaoFalta(item));
+
+  const validMilitaryLines = lines.filter(
+    (l) =>
+      /(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|ST\b)/i.test(l) ||
+      /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{5,6}/i.test(l)
+  );
+
+  if (validMilitaryLines.length > 0) {
+    return validMilitaryLines.length;
+  }
+
   const items = text
     .split(/[;\r\n]+/)
     .map((item) => item.trim())
-    .filter((item) => item.length > 2 && !isSemAlteracaoFalta(item));
+    .filter((item) => item.length > 2 && !isStructuralHeader(item) && !isSemAlteracaoFalta(item));
   return items.length > 0 ? items.length : 1;
 }
 
 /**
- * Verifica se um registro pertence ao dia especificado ('03OUT' ou '04OUT')
- * SEMPRE FOCANDO NA DATA DO CARIMBO DO FORMULÁRIO (CARIMBO DE DATA E HORA).
+ * Verifica se um registro pertence ao dia especificado ('24OUT', '25OUT' ou 'TODOS')
+ * No 2º Turno Oficial, 'TODOS' corresponde exclusivamente aos dias 24 e 25 de Outubro.
+ * Registros de 03 e 04 de Outubro (1º Turno) são estritamente excluídos.
+ * SEMPRE FOCANDO NA DATA DO CARIMBO DO FORMULÁRIO (CARIMBO DE DATA E HORA) E SERVIÇO DO DIA.
  */
 export function matchesCarimboDate(
   carimbo: string | undefined,
-  targetDay: '03OUT' | '04OUT',
+  targetDay: '24OUT' | '25OUT' | 'TODOS' | string,
   fallbackText?: string
 ): boolean {
+  // Quando o filtro for 'TODOS': exibe todos os registros da base oficial ativa do 2º Turno
+  if (targetDay === 'TODOS') {
+    return true;
+  }
+
   if (!carimbo && !fallbackText) return false;
   const c = (carimbo || '').trim().toLowerCase();
   const fb = (fallbackText || '').trim().toLowerCase();
 
-  if (targetDay === '03OUT') {
-    // Carimbo contendo 03/10, 3/10, 03out, 03-10 ou 3-10
-    if (
-      c.includes('03/10') ||
-      c.includes('3/10') ||
-      c.includes('03out') ||
-      c.includes('03-10') ||
-      c.includes('3-10')
-    ) {
-      return true;
-    }
-    // Fallback caso o carimbo venha com formato diferente ou de pré-teste (ex: 23/09)
-    if (fb && !c.includes('/10')) {
-      if (
-        fb.includes('03out') ||
-        fb.includes('03/10') ||
-        fb.includes('3/10') ||
-        fb.includes('sábado') ||
-        fb.includes('sabado') ||
-        fb.includes('03 de out')
-      ) {
-        return true;
-      }
-    }
-    return false;
+  // Testes para 24 de Outubro (Sábado - 2º Turno Oficial)
+  const is24Out =
+    c.includes('24/10') ||
+    c.includes('24out') ||
+    c.includes('24-10') ||
+    c.includes('24 de out') ||
+    fb.includes('24out') ||
+    fb.includes('24/10') ||
+    fb.includes('24 de out') ||
+    fb.includes('sábado') ||
+    fb.includes('sabado') ||
+    // Se o carimbo for anterior a 25/10 e não indicar domingo, enquadra no 1º dia do 2º Turno
+    (!c.includes('25/10') && !fb.includes('25out') && !fb.includes('domingo'));
+
+  // Testes para 25 de Outubro (Domingo - 2º Turno Oficial)
+  const is25Out =
+    c.includes('25/10') ||
+    c.includes('25out') ||
+    c.includes('25-10') ||
+    c.includes('25 de out') ||
+    fb.includes('25out') ||
+    fb.includes('25/10') ||
+    fb.includes('25 de out') ||
+    fb.includes('domingo');
+
+  if (targetDay === '24OUT') {
+    return is24Out;
   }
 
-  if (targetDay === '04OUT') {
-    // Carimbo contendo 04/10, 4/10, 04out, 04-10 ou 4-10
-    if (
-      c.includes('04/10') ||
-      c.includes('4/10') ||
-      c.includes('04out') ||
-      c.includes('04-10') ||
-      c.includes('4-10')
-    ) {
-      return true;
-    }
-    // Fallback caso o carimbo venha com formato diferente ou de pré-teste
-    if (fb && !c.includes('/10')) {
-      if (
-        fb.includes('04out') ||
-        fb.includes('04/10') ||
-        fb.includes('4/10') ||
-        fb.includes('domingo') ||
-        fb.includes('04 de out')
-      ) {
-        // Se for serviço iniciado no dia 03 (ex: "Serviço do dia 03OUT26"), prioriza 03OUT
-        if (fb.includes('serviço do dia 03') || fb.includes('servico do dia 03') || fb.includes('03out26 ( 14:00')) {
-          return false;
-        }
-        return true;
-      }
-    }
-    return false;
+  if (targetDay === '25OUT') {
+    return is25Out;
   }
 
   return true;
@@ -879,12 +887,10 @@ export function exportOcorrenciasPdf(
     });
   }
 
-  // 3. Filtragem por Dia com foco no Carimbo de Data e Hora
-  if (diaFilter === '03OUT' || diaFilter === '04OUT') {
-    filtered = filtered.filter((o) =>
-      matchesCarimboDate(o.carimbo, diaFilter, `${o.servicoDia || ''} ${o.dataHoraFato || ''} ${o.dinamica || ''}`)
-    );
-  }
+  // 3. Filtragem por Dia com foco no Carimbo de Data e Hora (2º Turno Oficial: 24OUT e 25OUT)
+  filtered = filtered.filter((o) =>
+    matchesCarimboDate(o.carimbo, diaFilter || 'TODOS', `${o.servicoDia || ''} ${o.dataHoraFato || ''} ${o.dinamica || ''}`)
+  );
 
   // 4. Filtragem por categoria de crime se selecionada
   if (crimeFilter !== 'TODOS') {
@@ -934,11 +940,15 @@ export function exportOcorrenciasPdf(
   const total = filtered.length;
 
   const diaLabel =
-    diaFilter === '03OUT'
-      ? 'DIA 03OUT26 (SÁBADO)'
+    diaFilter === '24OUT'
+      ? 'DIA 24OUT26 (SÁBADO - 2º TURNO)'
+      : diaFilter === '25OUT'
+      ? 'DIA 25OUT26 (DOMINGO - 2º TURNO)'
+      : diaFilter === '03OUT'
+      ? 'DIA 03OUT26 (1º TURNO)'
       : diaFilter === '04OUT'
-      ? 'DIA 04OUT26 (DOMINGO)'
-      : 'GERAL (TODOS OS DIAS)';
+      ? 'DIA 04OUT26 (1º TURNO)'
+      : '2º TURNO (24 E 25 DE OUTUBRO DE 2026)';
 
   // Detalhamento dos filtros para o subtítulo do relatório
   const filterParts: string[] = [];
@@ -951,9 +961,11 @@ export function exportOcorrenciasPdf(
   const fileParts = ['RELATORIO_OCORRENCIAS'];
   if (cpaFilter !== 'TODOS') fileParts.push(cpaFilter.replace(/[^A-Za-z0-9]/g, '_'));
   if (opmFilter !== 'TODAS') fileParts.push(opmFilter.replace(/[^A-Za-z0-9]/g, '_'));
-  if (diaFilter === '03OUT') fileParts.push('03OUT26');
+  if (diaFilter === '24OUT') fileParts.push('24OUT26');
+  else if (diaFilter === '25OUT') fileParts.push('25OUT26');
+  else if (diaFilter === '03OUT') fileParts.push('03OUT26');
   else if (diaFilter === '04OUT') fileParts.push('04OUT26');
-  else fileParts.push('GERAL');
+  else fileParts.push('2º_TURNO_24_25_OUT');
   const filename = `${fileParts.filter(Boolean).join('_').replace(/__+/g, '_')}.pdf`;
 
   // 1. Totalização Executiva dos Crimes Assinalados e Ocorrências com Dinâmica
@@ -1428,12 +1440,10 @@ export function exportFaltasPdf(
     });
   }
 
-  // 3. Filtragem por Dia com foco no Carimbo de Data e Hora
-  if (diaFilter === '03OUT' || diaFilter === '04OUT') {
-    filtered = filtered.filter((f) =>
-      matchesCarimboDate(f.carimbo, diaFilter, `${f.servicoDia || ''} ${f.turno || ''}`)
-    );
-  }
+  // 3. Filtragem por Dia com foco no Carimbo de Data e Hora (2º Turno Oficial: 24OUT e 25OUT)
+  filtered = filtered.filter((f) =>
+    matchesCarimboDate(f.carimbo, diaFilter || 'TODOS', `${f.servicoDia || ''} ${f.turno || ''}`)
+  );
 
   // 4. Busca textual ampla
   if (searchFilter) {
@@ -1463,11 +1473,15 @@ export function exportFaltasPdf(
   const total = filtered.length;
 
   const diaLabel =
-    diaFilter === '03OUT'
-      ? 'DIA 03OUT26 (SÁBADO)'
+    diaFilter === '24OUT'
+      ? 'DIA 24OUT26 (SÁBADO - 2º TURNO)'
+      : diaFilter === '25OUT'
+      ? 'DIA 25OUT26 (DOMINGO - 2º TURNO)'
+      : diaFilter === '03OUT'
+      ? 'DIA 03OUT26 (1º TURNO)'
       : diaFilter === '04OUT'
-      ? 'DIA 04OUT26 (DOMINGO)'
-      : 'GERAL (TODOS OS DIAS)';
+      ? 'DIA 04OUT26 (1º TURNO)'
+      : '2º TURNO (24 E 25 DE OUTUBRO DE 2026)';
 
   // Detalhamento dos filtros para o subtítulo do relatório
   const filterParts: string[] = [];
@@ -1480,9 +1494,11 @@ export function exportFaltasPdf(
   const fileParts = ['RELATORIO_FALTAS'];
   if (cpaFilter !== 'TODOS') fileParts.push(cpaFilter.replace(/[^A-Za-z0-9]/g, '_'));
   if (opmFilter !== 'TODAS') fileParts.push(opmFilter.replace(/[^A-Za-z0-9]/g, '_'));
-  if (diaFilter === '03OUT') fileParts.push('03OUT26');
+  if (diaFilter === '24OUT') fileParts.push('24OUT26');
+  else if (diaFilter === '25OUT') fileParts.push('25OUT26');
+  else if (diaFilter === '03OUT') fileParts.push('03OUT26');
   else if (diaFilter === '04OUT') fileParts.push('04OUT26');
-  else fileParts.push('GERAL');
+  else fileParts.push('2º_TURNO_24_25_OUT');
   const filename = `${fileParts.filter(Boolean).join('_').replace(/__+/g, '_')}.pdf`;
 
   // Totalização geral de policiais faltosos do conjunto filtrado

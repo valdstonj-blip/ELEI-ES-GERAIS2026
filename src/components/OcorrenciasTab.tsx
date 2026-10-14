@@ -38,6 +38,7 @@ interface OcorrenciasTabProps {
   onSync?: () => void;
   isSyncing?: boolean;
   onOpenSettings?: () => void;
+  isAdmin?: boolean;
 }
 
 // As 5 perguntas com respostas pré-definidas em múltipla escolha
@@ -174,9 +175,11 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
   onSync,
   isSyncing,
   onOpenSettings,
+  isAdmin = true,
 }) => {
-  // Filtro estrito de dias pelo Carimbo de Data/Hora (03OUT26 ou 04OUT26)
-  const [selectedDay, setSelectedDay] = useState<'TODOS' | '03OUT' | '04OUT'>('TODOS');
+  // Filtro estrito de dias pelo Carimbo de Data/Hora (2º Turno Oficial: 24OUT e 25OUT)
+  // 'TODOS' agora corresponde exclusivamente a todos os dias do 2º Turno (24 e 25 de Outubro)
+  const [selectedDay, setSelectedDay] = useState<'TODOS' | '24OUT' | '25OUT'>('TODOS');
   const [selectedCrimeFilter, setSelectedCrimeFilter] = useState<string>('TODOS');
   const [selectedSpecificCrime, setSelectedSpecificCrime] = useState<string | null>(null);
   const [showCrimesTable, setShowCrimesTable] = useState(false);
@@ -194,19 +197,27 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 20;
 
+  // Filtragem preliminar de dias com foco estrito no 2º Turno (24 e 25 de Outubro; nunca 03 ou 04 de Outubro)
+  const dayFilteredOcorrencias = useMemo(() => {
+    return ocorrencias.filter((oc) => {
+      const fallbackText = `${oc.servicoDia || ''} ${oc.dataHoraFato || ''} ${oc.dinamica || ''}`;
+      return matchesCarimboDate(oc.carimbo, selectedDay, fallbackText);
+    });
+  }, [ocorrencias, selectedDay]);
+
   const availableCpas = useMemo(() => {
     const set = new Set(
-      ocorrencias.map((o) => normalizeCpaName(o.comandoIntermediario || o.cpa || '')).filter(Boolean)
+      dayFilteredOcorrencias.map((o) => normalizeCpaName(o.comandoIntermediario || o.cpa || '')).filter(Boolean)
     );
     return ['TODOS', ...Array.from(set).sort()];
-  }, [ocorrencias]);
+  }, [dayFilteredOcorrencias]);
 
   const availableOpms = useMemo(() => {
     const set = new Set(
-      ocorrencias.map((o) => o.opm || o.uop).filter(Boolean)
+      dayFilteredOcorrencias.map((o) => o.opm || o.uop).filter(Boolean)
     );
     return ['TODAS', ...Array.from(set).sort()];
-  }, [ocorrencias]);
+  }, [dayFilteredOcorrencias]);
 
   // Contagem para cada uma das 5 perguntas de múltipla escolha + ocorrências sem crime categorizado (apenas dinâmica)
   const countsPerCrimeQuestion = useMemo(() => {
@@ -219,7 +230,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
       semCrimeComDinamica: 0,
     };
 
-    ocorrencias.forEach((oc) => {
+    dayFilteredOcorrencias.forEach((oc) => {
       let teveCrime = false;
       if (!isNaoHouve(oc.crimesCandidatos)) {
         counts['Crimes comuns contra candidatos']++;
@@ -253,7 +264,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
     });
 
     return counts;
-  }, [ocorrencias]);
+  }, [dayFilteredOcorrencias]);
 
   // Totalização de cada opção específica assinalada no formulário (apenas quem tem quantidade > 0)
   const crimesBreakdown = useMemo(() => {
@@ -265,7 +276,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
     const map = new Map<string, CrimeStat>();
     let countSemCrimeComDinamica = 0;
 
-    ocorrencias.forEach((o) => {
+    dayFilteredOcorrencias.forEach((o) => {
       let teveCrime = false;
 
       if (o.crimesCandidatos && !isNaoHouve(o.crimesCandidatos)) {
@@ -336,14 +347,14 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
       totalCrimes,
       totalGeral,
     };
-  }, [ocorrencias]);
+  }, [dayFilteredOcorrencias]);
 
-  // Indicadores de Resumo Gerais
+  // Indicadores de Resumo Gerais baseados no filtro de dia do 2º Turno
   const stats = useMemo(() => {
-    const total = ocorrencias.length;
+    const total = dayFilteredOcorrencias.length;
     const opms = new Set<string>();
 
-    ocorrencias.forEach((oc) => {
+    dayFilteredOcorrencias.forEach((oc) => {
       const uop = oc.opm || oc.uop;
       if (uop) opms.add(uop);
     });
@@ -352,11 +363,11 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
       total,
       opmsCount: opms.size,
     };
-  }, [ocorrencias]);
+  }, [dayFilteredOcorrencias]);
 
-  // Filtragem focada na Data do Carimbo de Data/Hora (03OUT ou 04OUT)
+  // Filtragem focada no 2º Turno (24 e 25 de Outubro), CPA, OPM, tipo de crime e busca
   const filteredOcorrencias = useMemo(() => {
-    return ocorrencias.filter((oc) => {
+    return dayFilteredOcorrencias.filter((oc) => {
       const cpaVal = normalizeCpaName(oc.comandoIntermediario || oc.cpa || '');
       if (selectedCpa !== 'TODOS' && cpaVal !== selectedCpa) return false;
 
@@ -419,12 +430,10 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
         if (!matchesSpecific) return false;
       }
 
-      // Filtro de Dia focado no Carimbo de Data e Hora e no Serviço do Dia
-      if (selectedDay !== 'TODOS') {
-        const fallbackText = `${oc.servicoDia || ''} ${oc.dataHoraFato || ''} ${oc.dinamica || ''}`;
-        if (!matchesCarimboDate(oc.carimbo, selectedDay, fallbackText)) {
-          return false;
-        }
+      // Filtro de Dia focado no Carimbo de Data e Hora e no Serviço do Dia (2º Turno: 24 e 25 de Outubro)
+      const fallbackText = `${oc.servicoDia || ''} ${oc.dataHoraFato || ''} ${oc.dinamica || ''}`;
+      if (!matchesCarimboDate(oc.carimbo, selectedDay, fallbackText)) {
+        return false;
       }
 
       // Busca por texto amplo
@@ -537,10 +546,10 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                 <span>{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
               </button>
             )}
-            {onOpenSettings && (
+            {isAdmin && onOpenSettings && (
               <button
                 onClick={onOpenSettings}
-                title="Conectar ou alterar link da planilha"
+                title="Conectar ou alterar link da planilha (Acesso Restrito Admin)"
                 className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-200 flex items-center gap-1"
               >
                 <Link2 className="w-3.5 h-3.5 text-slate-500" />
@@ -828,47 +837,48 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
             )}
           </div>
 
-          {/* Filtro de Dias: 03OUT26 e 04OUT26 */}
-          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200 shrink-0">
-            <Calendar className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
+          {/* Filtro de Dias: Exclusivo 2º Turno (24 e 25 de Outubro) */}
+          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200 shrink-0 flex-wrap">
+            <Calendar className="w-3.5 h-3.5 text-slate-500 ml-1.5 mr-0.5" />
             <button
               onClick={() => {
                 setSelectedDay('TODOS');
                 setCurrentPage(1);
               }}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+              title="Todos os Dias do 2º Turno (24 e 25 de Outubro)"
+              className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
                 selectedDay === 'TODOS'
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Todos os Dias
+              Todos (24 e 25/OUT)
             </button>
             <button
               onClick={() => {
-                setSelectedDay('03OUT');
+                setSelectedDay('24OUT');
                 setCurrentPage(1);
               }}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                selectedDay === '03OUT'
+              className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                selectedDay === '24OUT'
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              03OUT26 (Sábado)
+              24OUT26 (Sáb)
             </button>
             <button
               onClick={() => {
-                setSelectedDay('04OUT');
+                setSelectedDay('25OUT');
                 setCurrentPage(1);
               }}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                selectedDay === '04OUT'
+              className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                selectedDay === '25OUT'
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              04OUT26 (Domingo)
+              25OUT26 (Dom)
             </button>
           </div>
 
@@ -983,7 +993,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                       <button
                         onClick={() => {
                           exportOcorrenciasPdf(ocorrencias, {
-                            dia: '03OUT',
+                            dia: '24OUT',
                             cpa: selectedCpa,
                             opm: selectedOpm,
                             crimeFilter: 'TODOS',
@@ -993,15 +1003,15 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">PDF 03OUT26 (Todas Categorias) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF 24OUT26 (Sábado) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
-                          03/10
+                          24/10
                         </span>
                       </button>
                       <button
                         onClick={() => {
                           exportOcorrenciasPdf(ocorrencias, {
-                            dia: '04OUT',
+                            dia: '25OUT',
                             cpa: selectedCpa,
                             opm: selectedOpm,
                             crimeFilter: 'TODOS',
@@ -1011,9 +1021,9 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">PDF 04OUT26 (Todas Categorias) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF 25OUT26 (Domingo) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
-                          04/10
+                          25/10
                         </span>
                       </button>
                       <button
@@ -1029,9 +1039,9 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">PDF Geral (Todas Categorias) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF Consolidado 2º Turno (24 e 25/10) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono shrink-0 ml-1">
-                          Geral
+                          2º Turno
                         </span>
                       </button>
                     </div>

@@ -34,6 +34,7 @@ interface FaltasTabProps {
   onSync?: () => void;
   isSyncing?: boolean;
   onOpenSettings?: () => void;
+  isAdmin?: boolean;
 }
 
 // Função utilitária precisa para detectar se o texto expressa ausência de falta / sem alteração
@@ -81,15 +82,39 @@ export function isSemAlteracaoFalta(text: string | undefined | null): boolean {
   return false;
 }
 
+function isStructuralHeader(line: string): boolean {
+  const upper = line.toUpperCase().trim();
+  if (!upper) return true;
+  if (/^[0-9]+[ªº°]\s*CIA/i.test(upper) || /^CIA\b/i.test(upper) || /^SEDE\b/i.test(upper)) return true;
+  if (/^(I|II|III|IV|V|\d+)\s*[-–—]\s*(FALTAS?|ATRASOS?|DISPENSAS?)/i.test(upper)) return true;
+  if (/^(S\/|SEM\s+)ALTERAÇ/i.test(upper) || /^NÃO\s+HOUVE/i.test(upper) || upper === '-' || upper === 'NADA CONSTA') return true;
+  return false;
+}
+
 // Função utilitária precisa para contar policiais em texto com delimitadores (ex: ponto e vírgula)
 export function countPoliciaisInText(text: string | undefined | null): number {
   if (!text) return 0;
   if (isSemAlteracaoFalta(text)) return 0;
 
+  const lines = text
+    .split(/[\r\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => Boolean(s) && !isStructuralHeader(s) && !isSemAlteracaoFalta(s));
+
+  const validMilitaryLines = lines.filter(
+    (l) =>
+      /(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|ST\b)/i.test(l) ||
+      /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{5,6}/i.test(l)
+  );
+
+  if (validMilitaryLines.length > 0) {
+    return validMilitaryLines.length;
+  }
+
   const items = text
     .split(/[;\r\n]+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 2 && !isSemAlteracaoFalta(s));
+    .filter((s) => s.length > 2 && !isStructuralHeader(s) && !isSemAlteracaoFalta(s));
   return items.length > 0 ? items.length : 1;
 }
 
@@ -99,11 +124,14 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
   onSync,
   isSyncing,
   onOpenSettings,
+  isAdmin = true,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCpa, setSelectedCpa] = useState('TODOS');
   const [selectedOpm, setSelectedOpm] = useState('TODAS');
-  const [selectedDay, setSelectedDay] = useState<'TODOS' | '03OUT' | '04OUT'>('TODOS');
+  // Filtro estrito de dias pelo Carimbo de Data/Hora (2º Turno Oficial: 24OUT e 25OUT)
+  // 'TODOS' agora corresponde exclusivamente a todos os dias do 2º Turno (24 e 25 de Outubro)
+  const [selectedDay, setSelectedDay] = useState<'TODOS' | '24OUT' | '25OUT'>('TODOS');
   const [pdfDropdownOpen, setPdfDropdownOpen] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -163,9 +191,9 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
         };
       }
 
-      // Se houver filtro de dia aplicado, respeita também no consolidado por CPA
+      // Se houver filtro de dia aplicado, respeita também no consolidado por CPA (2º Turno: 24 e 25 OUT)
       if (selectedDay !== 'TODOS') {
-        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''}`;
+        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''} ${f.data || ''}`;
         if (!matchesCarimboDate(f.carimbo, selectedDay, fallbackText)) {
           return;
         }
@@ -246,9 +274,9 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
       const opmVal = (f.opm || f.uopDestino || f.opmOrigem || '').trim();
       if (selectedOpm !== 'TODAS' && opmVal !== selectedOpm) return false;
 
-      // Filtro de Dia focado no Carimbo de Data e Hora e no Serviço do Dia
+      // Filtro de Dia focado no Carimbo de Data e Hora e no Serviço do Dia (2º Turno: 24 e 25 OUT)
       if (selectedDay !== 'TODOS') {
-        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''}`;
+        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''} ${f.data || ''}`;
         if (!matchesCarimboDate(f.carimbo, selectedDay, fallbackText)) {
           return false;
         }
@@ -288,13 +316,20 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
     return filteredFaltas.slice(start, start + itemsPerPage);
   }, [filteredFaltas, currentPage, itemsPerPage]);
 
-  // Totalização exata da quantidade de policiais faltosos
+  // Totalização exata da quantidade de policiais faltosos no dia selecionado do 2º Turno
   const stats = useMemo(() => {
-    const totalEnvios = faltas.length;
+    const targetPool = faltas.filter((f) => {
+      if (selectedDay !== 'TODOS') {
+        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''} ${f.data || ''}`;
+        return matchesCarimboDate(f.carimbo, selectedDay, fallbackText);
+      }
+      return true;
+    });
+
     let totalPoliciaisFaltosos = 0;
     const opmsComFaltasSet = new Set<string>();
 
-    faltas.forEach((f) => {
+    targetPool.forEach((f) => {
       const qtd = countPoliciaisInText(f.faltasPoe || f.motivo);
       totalPoliciaisFaltosos += qtd;
       if (qtd > 0) {
@@ -305,8 +340,8 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
 
     const opmsCount = opmsComFaltasSet.size;
 
-    return { totalEnvios, totalPoliciaisFaltosos, opmsCount };
-  }, [faltas]);
+    return { totalEnvios: targetPool.length, totalPoliciaisFaltosos, opmsCount };
+  }, [faltas, selectedDay]);
 
   // Renderizador ajustado para os textos dos policiais faltosos
   const renderPolicialChips = (rawText: string | undefined) => {
@@ -430,10 +465,10 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
                 <span>{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
               </button>
             )}
-            {onOpenSettings && (
+            {isAdmin && onOpenSettings && (
               <button
                 onClick={onOpenSettings}
-                title="Conectar ou alterar link da planilha"
+                title="Conectar ou alterar link da planilha (Acesso Restrito Admin)"
                 className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-200 flex items-center gap-1"
               >
                 <Link2 className="w-3.5 h-3.5 text-slate-500" />
@@ -547,47 +582,48 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
             )}
           </div>
 
-          {/* Filtro de Dias: 03OUT26 e 04OUT26 */}
-          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200 shrink-0">
-            <Calendar className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
+          {/* Filtro de Dias: Exclusivo 2º Turno (24 e 25 de Outubro) */}
+          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200 shrink-0 flex-wrap">
+            <Calendar className="w-3.5 h-3.5 text-slate-500 ml-1.5 mr-0.5" />
             <button
               onClick={() => {
                 setSelectedDay('TODOS');
                 setCurrentPage(1);
               }}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+              title="Todos os Dias do 2º Turno (24 e 25 de Outubro)"
+              className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
                 selectedDay === 'TODOS'
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Todos os Dias
+              Todos (24 e 25/OUT)
             </button>
             <button
               onClick={() => {
-                setSelectedDay('03OUT');
+                setSelectedDay('24OUT');
                 setCurrentPage(1);
               }}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                selectedDay === '03OUT'
+              className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                selectedDay === '24OUT'
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              03OUT26 (Sábado)
+              24OUT26 (Sáb)
             </button>
             <button
               onClick={() => {
-                setSelectedDay('04OUT');
+                setSelectedDay('25OUT');
                 setCurrentPage(1);
               }}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                selectedDay === '04OUT'
+              className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                selectedDay === '25OUT'
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              04OUT26 (Domingo)
+              25OUT26 (Dom)
             </button>
           </div>
 
@@ -681,7 +717,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
                       <button
                         onClick={() => {
                           exportFaltasPdf(faltas, {
-                            dia: '03OUT',
+                            dia: '24OUT',
                             cpa: selectedCpa,
                             opm: selectedOpm,
                             search: searchTerm,
@@ -690,15 +726,15 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">PDF 03OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF 24OUT26 (Sábado) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
-                          03/10
+                          24/10
                         </span>
                       </button>
                       <button
                         onClick={() => {
                           exportFaltasPdf(faltas, {
-                            dia: '04OUT',
+                            dia: '25OUT',
                             cpa: selectedCpa,
                             opm: selectedOpm,
                             search: searchTerm,
@@ -707,9 +743,9 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">PDF 04OUT26 {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF 25OUT26 (Domingo) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono shrink-0 ml-1">
-                          04/10
+                          25/10
                         </span>
                       </button>
                       <button
@@ -724,9 +760,9 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
                         }}
                         className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between font-medium cursor-pointer"
                       >
-                        <span className="truncate">Todos os Dias {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
+                        <span className="truncate">PDF Consolidado 2º Turno (24 e 25/10) {selectedOpm !== 'TODAS' ? `(${selectedOpm})` : selectedCpa !== 'TODOS' ? `(${selectedCpa})` : ''}</span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono shrink-0 ml-1">
-                          Filtrado
+                          2º Turno
                         </span>
                       </button>
                     </div>

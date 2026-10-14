@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   LocalVotacao,
   Ocorrencia,
@@ -16,19 +16,26 @@ import {
   parseFaltasCsv,
   isSim,
 } from './services/sheetService';
+import { matchesCarimboDate } from './services/pdfService';
 import { LoginScreen } from './components/LoginScreen';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LocaisTab } from './components/LocaisTab';
 import { OcorrenciasTab } from './components/OcorrenciasTab';
 import { FaltasTab } from './components/FaltasTab';
+import { VerificacaoTab } from './components/VerificacaoTab';
 import { SheetConnectionModal } from './components/SheetConnectionModal';
+import { runFaltasAudit } from './services/faltasAuditService';
 
 export default function App() {
-  // Autenticação local
+  // Autenticação e perfil de acesso ('admin' tem acesso a links/configurações; 'pm3' apenas visualiza)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('eleicoes2026_auth') === 'true';
   });
+  const [userRole, setUserRole] = useState<string>(() => {
+    return localStorage.getItem('eleicoes2026_role') || 'admin';
+  });
+  const isAdmin = userRole === 'admin';
 
   // Aba ativa de navegação direta no topo
   const [activeTab, setActiveTab] = useState<ActiveTab>('locais');
@@ -40,6 +47,7 @@ export default function App() {
   const [locais, setLocais] = useState<LocalVotacao[]>(() => CsvHelper.getStoredLocais());
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>(() => CsvHelper.getStoredOcorrencias());
   const [faltas, setFaltas] = useState<FaltaEfetivo[]>(() => CsvHelper.getStoredFaltas());
+  const [faltasVerificadas, setFaltasVerificadas] = useState<FaltaEfetivo[]>(() => CsvHelper.getStoredVerificacao());
 
   // Estado de sincronização em segundo plano
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -131,6 +139,25 @@ export default function App() {
       })();
       tasks.push(faltasTask);
 
+      // 4. Verificação de Faltas (Dados Depurados)
+      const verificacaoTask = (async () => {
+        const verifUrl = CsvHelper.getVerificacaoSheetUrl();
+        if (verifUrl && verifUrl.startsWith('http')) {
+          try {
+            const csvText = await fetchCsvWithTimeout(verifUrl);
+            const parsed = parseFaltasCsv(csvText);
+            if (parsed && parsed.length > 0) {
+              setFaltasVerificadas(parsed);
+              CsvHelper.saveVerificacao(parsed);
+              updatedSources++;
+            }
+          } catch (err: any) {
+            console.warn('Erro ao atualizar Planilha de Verificação:', err);
+          }
+        }
+      })();
+      tasks.push(verificacaoTask);
+
       await Promise.allSettled(tasks);
 
       const nowStr = new Date().toLocaleTimeString('pt-BR');
@@ -165,6 +192,26 @@ export default function App() {
       }
     });
 
+    CsvHelper.fetchServerOcorrencias().then((serverOcorr) => {
+      if (isMounted && serverOcorr && serverOcorr.length > 0) {
+        setOcorrencias(serverOcorr);
+      }
+    });
+
+    CsvHelper.fetchServerFaltas().then((serverFaltas) => {
+      if (isMounted && serverFaltas && serverFaltas.length > 0) {
+        setFaltas(serverFaltas);
+        setFaltasVerificadas((prev) => (prev.length === 0 ? serverFaltas : prev));
+      }
+    });
+
+    CsvHelper.fetchServerVerificacao().then((serverVerif) => {
+      if (isMounted && serverVerif && serverVerif.length > 0) {
+        setFaltasVerificadas(serverVerif);
+        setFaltas((prev) => (prev.length === 0 ? serverVerif : prev));
+      }
+    });
+
     CsvHelper.initAndSyncUrls().then((urls) => {
       if (isMounted) {
         console.log('[EMG-PM/3] Links permanentes inicializados com sucesso:', urls);
@@ -176,6 +223,17 @@ export default function App() {
       isMounted = false;
     };
   }, [syncData]);
+
+  // Se uma das bases possuir dados e a outra estiver vazia, sincroniza-as imediatamente
+  useEffect(() => {
+    if (faltas.length > 0 && faltasVerificadas.length === 0) {
+      setFaltasVerificadas(faltas);
+      CsvHelper.saveVerificacao(faltas);
+    } else if (faltasVerificadas.length > 0 && faltas.length === 0) {
+      setFaltas(faltasVerificadas);
+      CsvHelper.saveFaltas(faltasVerificadas);
+    }
+  }, [faltas.length, faltasVerificadas.length]);
 
   // Auto-refresh silencioso em segundo plano a cada 60 segundos
   useEffect(() => {
@@ -198,17 +256,28 @@ export default function App() {
   const handleAddFalta = (nova: FaltaEfetivo) => {
     const updated = [nova, ...faltas];
     setFaltas(updated);
+    setFaltasVerificadas(updated);
     CsvHelper.saveFaltas(updated);
+    CsvHelper.saveVerificacao(updated);
     showToast('Falta de efetivo registrada com sucesso!', 'success');
   };
 
   const handleLogout = () => {
     localStorage.removeItem('eleicoes2026_auth');
+    localStorage.removeItem('eleicoes2026_role');
     setIsAuthenticated(false);
+    setUserRole('admin');
   };
 
   if (!isAuthenticated) {
-    return <LoginScreen onLoginSuccess={() => setIsAuthenticated(true)} />;
+    return (
+      <LoginScreen
+        onLoginSuccess={() => {
+          setIsAuthenticated(true);
+          setUserRole(localStorage.getItem('eleicoes2026_role') || 'admin');
+        }}
+      />
+    );
   }
 
   return (
@@ -228,44 +297,68 @@ export default function App() {
         </div>
       )}
 
-      {/* Header Escuro com Navegação Direta e Botão de Sincronização */}
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isSyncing={isSyncing}
-        lastSyncTime={lastSyncTime}
-        onManualSync={() => syncData(false)}
-        onLogout={handleLogout}
-        onOpenSettings={() => setIsConnectionModalOpen(true)}
-        counts={{
-          locais: locais.length,
-          ocorrencias: ocorrencias.length,
-          faltas: faltas.length,
-          sensiveis: locais.filter((l) => isSim(l.areaSensivel)).length,
-        }}
-      />
+      {/* Contagens do 2º Turno Oficial */}
+      {(() => {
+        const countOcorrencias2oTurno = ocorrencias.length;
+        const countFaltas2oTurno = faltas.length;
 
-      {/* Modal de Conexão com Google Sheets & Importação de CSV */}
-      <SheetConnectionModal
-        isOpen={isConnectionModalOpen}
-        onClose={() => setIsConnectionModalOpen(false)}
-        onLocaisUpdated={(data) => {
-          setLocais(data);
-          showToast(`${data.length.toLocaleString('pt-BR')} locais de votação atualizados com sucesso!`, 'success');
-        }}
-        onOcorrenciasUpdated={(data) => {
-          setOcorrencias(data);
-          showToast(`${data.length} ocorrências atualizadas com sucesso!`, 'success');
-        }}
-        onFaltasUpdated={(data) => {
-          setFaltas(data);
-          showToast(`${data.length} registros de efetivo atualizados com sucesso!`, 'success');
-        }}
-        onSyncAll={() => {
-          syncData(false);
-          showToast('Links gravados no servidor e bases sincronizadas com sucesso!', 'success');
-        }}
-      />
+        return (
+          <Header
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            isSyncing={isSyncing}
+            lastSyncTime={lastSyncTime}
+            onManualSync={() => syncData(false)}
+            onLogout={handleLogout}
+            onOpenSettings={isAdmin ? () => setIsConnectionModalOpen(true) : undefined}
+            isAdmin={isAdmin}
+            userRole={userRole}
+            counts={{
+              locais: locais.length,
+              ocorrencias: countOcorrencias2oTurno,
+              faltas: countFaltas2oTurno,
+              verificacao: faltasVerificadas.length || countFaltas2oTurno,
+              sensiveis: locais.filter((l) => isSim(l.areaSensivel)).length,
+              inconsistencias: faltasVerificadas.length || countFaltas2oTurno,
+            }}
+          />
+        );
+      })()}
+
+      {/* Modal de Conexão com Google Sheets & Importação de CSV (Apenas Admin) */}
+      {isAdmin && (
+        <SheetConnectionModal
+          isOpen={isConnectionModalOpen}
+          onClose={() => setIsConnectionModalOpen(false)}
+          onLocaisUpdated={(data) => {
+            setLocais(data);
+            showToast(`${data.length.toLocaleString('pt-BR')} locais de votação atualizados com sucesso!`, 'success');
+          }}
+          onOcorrenciasUpdated={(data) => {
+            setOcorrencias(data);
+            showToast(`${data.length} ocorrências atualizadas com sucesso!`, 'success');
+          }}
+          onFaltasUpdated={(data) => {
+            setFaltas(data);
+            setFaltasVerificadas(data);
+            showToast(`${data.length} registros de faltas/efetivo atualizados com sucesso!`, 'success');
+          }}
+          onVerificacaoUpdated={(data) => {
+            setFaltasVerificadas(data);
+            setFaltas(data);
+          }}
+          onSyncAll={() => {
+            syncData(false);
+            showToast('Links gravados no servidor e bases sincronizadas com sucesso!', 'success');
+          }}
+          onReset2Turno={() => {
+            setOcorrencias(CsvHelper.getStoredOcorrencias());
+            setFaltas(CsvHelper.getStoredFaltas());
+            setFaltasVerificadas(CsvHelper.getStoredVerificacao());
+            showToast('Caches purgados e sistema redefinido para o 2º Turno Oficial!', 'success');
+          }}
+        />
+      )}
 
       {/* Corpo da Aplicação Responsivo */}
       <main className="max-w-7xl mx-auto px-2.5 sm:px-4 py-3 sm:py-4 flex-1 w-full">
@@ -288,7 +381,8 @@ export default function App() {
             lastSyncTime={lastSyncTime}
             onSync={() => syncData(false)}
             isSyncing={isSyncing}
-            onOpenSettings={() => setIsConnectionModalOpen(true)}
+            onOpenSettings={isAdmin ? () => setIsConnectionModalOpen(true) : undefined}
+            isAdmin={isAdmin}
           />
         )}
 
@@ -299,7 +393,24 @@ export default function App() {
             lastSyncTime={lastSyncTime}
             onSync={() => syncData(false)}
             isSyncing={isSyncing}
-            onOpenSettings={() => setIsConnectionModalOpen(true)}
+            onOpenSettings={isAdmin ? () => setIsConnectionModalOpen(true) : undefined}
+            isAdmin={isAdmin}
+          />
+        )}
+
+        {activeTab === 'verificacao' && (
+          <VerificacaoTab
+            faltas={faltasVerificadas}
+            onUpdateFaltas={(data) => {
+              setFaltasVerificadas(data);
+              CsvHelper.saveVerificacao(data);
+              setFaltas(data);
+              CsvHelper.saveFaltas(data);
+            }}
+            lastSyncTime={lastSyncTime}
+            onSync={() => syncData(false)}
+            isSyncing={isSyncing}
+            isAdmin={isAdmin}
           />
         )}
       </main>

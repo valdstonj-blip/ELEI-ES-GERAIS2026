@@ -15,14 +15,17 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const CONFIG_FILE = path.resolve(__dirname, 'sheet-config.json');
 const LOCAIS_DATA_FILE = path.resolve(__dirname, 'locais-data.json');
+const OCORRENCIAS_DATA_FILE = path.resolve(__dirname, 'ocorrencias-data.json');
+const FALTAS_DATA_FILE = path.resolve(__dirname, 'faltas-data.json');
+const VERIFICACAO_DATA_FILE = path.resolve(__dirname, 'verificacao-data.json');
 
+// Configuração Padrão do 2º Turno Oficial (24 e 25 de Outubro)
+// Não pré-carrega URLs do 1º Turno (evita recuperar as 87 ocorrências antigas)
 const DEFAULT_CONFIG = {
-  locaisUrl:
-    'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit?gid=907029771#gid=907029771',
-  ocorrenciasUrl:
-    'https://docs.google.com/spreadsheets/d/1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE/edit?gid=2054351637#gid=2054351637',
-  faltasUrl:
-    'https://docs.google.com/spreadsheets/d/1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8/edit?gid=613414577#gid=613414577',
+  locaisUrl: 'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit',
+  ocorrenciasUrl: '',
+  faltasUrl: '',
+  verificacaoUrl: '',
   updatedAt: new Date().toISOString(),
 };
 
@@ -30,7 +33,15 @@ function readConfig() {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      // Limpeza de segurança: se o arquivo no disco ainda tiver os links antigos do 1º turno com as 87 ocorrências, anula-os
+      if (parsed.ocorrenciasUrl && parsed.ocorrenciasUrl.includes('1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE')) {
+        parsed.ocorrenciasUrl = '';
+      }
+      if (parsed.faltasUrl && parsed.faltasUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8') && parsed.faltasUrl.includes('613414577')) {
+        parsed.faltasUrl = '';
+      }
+      return { ...DEFAULT_CONFIG, ...parsed };
     }
   } catch (err) {
     console.error('Erro ao ler sheet-config.json:', err);
@@ -48,44 +59,35 @@ function writeConfig(config: any) {
   }
 }
 
-// Endpoint para ler configuração ativa de planilhas
+// 1. Configuração ativa de planilhas (Links do Sistema)
 app.get('/api/sheet-config', (_req, res) => {
   const cfg = readConfig();
   res.json(cfg);
 });
 
-// Endpoint para gravar e sincronizar links de planilhas entre todos os dispositivos
 app.post('/api/sheet-config', (req, res) => {
   const current = readConfig();
-  const { locaisUrl, ocorrenciasUrl, faltasUrl } = req.body || {};
+  const { locaisUrl, ocorrenciasUrl, faltasUrl, verificacaoUrl } = req.body || {};
 
   const updated = {
     ...current,
-    locaisUrl:
-      typeof locaisUrl === 'string'
-        ? (locaisUrl.trim().startsWith('http') ? locaisUrl.trim() : (locaisUrl.trim() === '' ? '' : current.locaisUrl))
-        : current.locaisUrl,
-    ocorrenciasUrl:
-      typeof ocorrenciasUrl === 'string'
-        ? (ocorrenciasUrl.trim().startsWith('http') ? ocorrenciasUrl.trim() : '')
-        : current.ocorrenciasUrl,
-    faltasUrl:
-      typeof faltasUrl === 'string'
-        ? (faltasUrl.trim().startsWith('http') ? faltasUrl.trim() : '')
-        : current.faltasUrl,
+    locaisUrl: typeof locaisUrl === 'string' ? locaisUrl.trim() : current.locaisUrl,
+    ocorrenciasUrl: typeof ocorrenciasUrl === 'string' ? ocorrenciasUrl.trim() : current.ocorrenciasUrl,
+    faltasUrl: typeof faltasUrl === 'string' ? faltasUrl.trim() : current.faltasUrl,
+    verificacaoUrl: typeof verificacaoUrl === 'string' ? verificacaoUrl.trim() : current.verificacaoUrl,
     updatedAt: new Date().toISOString(),
   };
 
   const ok = writeConfig(updated);
   if (ok) {
-    console.log('[EMG-PM/3] Links de planilhas atualizados no servidor:', updated);
+    console.log('[EMG-PM/3] Links de planilhas atualizados e fixados no servidor:', updated);
     res.json({ success: true, config: updated });
   } else {
     res.status(500).json({ success: false, message: 'Falha ao salvar configuração no servidor.' });
   }
 });
 
-// Endpoint para persistência permanente de locais de votação
+// 2. Persistência de Locais de Votação
 app.get('/api/locais', (_req, res) => {
   try {
     if (fs.existsSync(LOCAIS_DATA_FILE)) {
@@ -109,9 +111,161 @@ app.post('/api/locais', (req, res) => {
       console.log(`[EMG-PM/3] ${locais.length} locais salvos com persistência no servidor.`);
       return res.json({ success: true, count: locais.length });
     }
-    res.status(400).json({ success: false, message: 'Dados inválidos ou vazios.' });
+    res.status(400).json({ success: false, message: 'Dados de locais inválidos.' });
   } catch (err: any) {
     console.error('Erro ao gravar locais-data.json:', err);
+    res.status(500).json({ success: false, message: err?.message });
+  }
+});
+
+// 3. Persistência de Ocorrências (2º Turno Oficial)
+app.get('/api/ocorrencias', (_req, res) => {
+  try {
+    if (fs.existsSync(OCORRENCIAS_DATA_FILE)) {
+      const raw = fs.readFileSync(OCORRENCIAS_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Filtra para garantir que não haja sobras antigas do 1º turno
+        const clean = parsed.filter((o: any) => {
+          const s = `${o?.carimbo || ''} ${o?.servicoDia || ''} ${o?.dinamica || ''}`.toLowerCase();
+          return !(
+            (s.includes('03/10') || s.includes('03out') || s.includes('04/10') || s.includes('04out')) &&
+            !(s.includes('24/10') || s.includes('25/10') || s.includes('24out') || s.includes('25out'))
+          );
+        });
+        return res.json({ success: true, count: clean.length, ocorrencias: clean });
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao ler ocorrencias-data.json:', err);
+  }
+  res.json({ success: false, ocorrencias: [] });
+});
+
+app.post('/api/ocorrencias', (req, res) => {
+  try {
+    const { ocorrencias } = req.body || {};
+    if (Array.isArray(ocorrencias)) {
+      fs.writeFileSync(OCORRENCIAS_DATA_FILE, JSON.stringify(ocorrencias, null, 2), 'utf-8');
+      console.log(`[EMG-PM/3] ${ocorrencias.length} ocorrência(s) persistida(s) no servidor.`);
+      return res.json({ success: true, count: ocorrencias.length });
+    }
+    res.status(400).json({ success: false, message: 'Formato de ocorrências inválido.' });
+  } catch (err: any) {
+    console.error('Erro ao gravar ocorrencias-data.json:', err);
+    res.status(500).json({ success: false, message: err?.message });
+  }
+});
+
+// 4. Persistência de Faltas no POE (2º Turno Oficial)
+app.get('/api/faltas', (_req, res) => {
+  try {
+    if (fs.existsSync(FALTAS_DATA_FILE)) {
+      const raw = fs.readFileSync(FALTAS_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return res.json({ success: true, count: parsed.length, faltas: parsed });
+      }
+    }
+    // Fallback: se faltas-data estiver vazio, usa verificacao-data
+    if (fs.existsSync(VERIFICACAO_DATA_FILE)) {
+      const raw = fs.readFileSync(VERIFICACAO_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return res.json({ success: true, count: parsed.length, faltas: parsed });
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao ler faltas-data.json:', err);
+  }
+  res.json({ success: false, faltas: [] });
+});
+
+app.post('/api/faltas', (req, res) => {
+  try {
+    const { faltas } = req.body || {};
+    if (Array.isArray(faltas)) {
+      fs.writeFileSync(FALTAS_DATA_FILE, JSON.stringify(faltas, null, 2), 'utf-8');
+      // Sincroniza também a base de verificação para manter ambas consistentes
+      fs.writeFileSync(VERIFICACAO_DATA_FILE, JSON.stringify(faltas, null, 2), 'utf-8');
+      console.log(`[EMG-PM/3] ${faltas.length} falta(s) persistida(s) no servidor.`);
+      return res.json({ success: true, count: faltas.length });
+    }
+    res.status(400).json({ success: false, message: 'Formato de faltas inválido.' });
+  } catch (err: any) {
+    console.error('Erro ao gravar faltas-data.json:', err);
+    res.status(500).json({ success: false, message: err?.message });
+  }
+});
+
+// 5. Persistência de Verificação de Faltas
+app.get('/api/verificacao', (_req, res) => {
+  try {
+    if (fs.existsSync(VERIFICACAO_DATA_FILE)) {
+      const raw = fs.readFileSync(VERIFICACAO_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return res.json({ success: true, count: parsed.length, verificacao: parsed });
+      }
+    }
+    // Fallback: se verificacao estiver vazio, usa faltas-data
+    if (fs.existsSync(FALTAS_DATA_FILE)) {
+      const raw = fs.readFileSync(FALTAS_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return res.json({ success: true, count: parsed.length, verificacao: parsed });
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao ler verificacao-data.json:', err);
+  }
+  res.json({ success: false, verificacao: [] });
+});
+
+app.post('/api/verificacao', (req, res) => {
+  try {
+    const { verificacao } = req.body || {};
+    if (Array.isArray(verificacao)) {
+      fs.writeFileSync(VERIFICACAO_DATA_FILE, JSON.stringify(verificacao, null, 2), 'utf-8');
+      // Sincroniza também faltas para manter ambas consistentes
+      fs.writeFileSync(FALTAS_DATA_FILE, JSON.stringify(verificacao, null, 2), 'utf-8');
+      console.log(`[EMG-PM/3] ${verificacao.length} registro(s) de verificação persistido(s) no servidor.`);
+      return res.json({ success: true, count: verificacao.length });
+    }
+    res.status(400).json({ success: false, message: 'Formato de verificação inválido.' });
+  } catch (err: any) {
+    console.error('Erro ao gravar verificacao-data.json:', err);
+    res.status(500).json({ success: false, message: err?.message });
+  }
+});
+
+// 6. Endpoint de Limpeza Total de Caches Antigos (Reset 2º Turno Oficial)
+app.post('/api/clear-cache', (_req, res) => {
+  try {
+    // Remove arquivos de dados antigos do 1º turno
+    if (fs.existsSync(OCORRENCIAS_DATA_FILE)) fs.unlinkSync(OCORRENCIAS_DATA_FILE);
+    if (fs.existsSync(FALTAS_DATA_FILE)) fs.unlinkSync(FALTAS_DATA_FILE);
+    if (fs.existsSync(VERIFICACAO_DATA_FILE)) fs.unlinkSync(VERIFICACAO_DATA_FILE);
+
+    // Limpa links antigos do 1º turno na configuração
+    const cfg = readConfig();
+    const cleanCfg = {
+      ...cfg,
+      ocorrenciasUrl: '',
+      faltasUrl: '',
+      verificacaoUrl: '',
+      updatedAt: new Date().toISOString(),
+    };
+    writeConfig(cleanCfg);
+
+    console.log('[EMG-PM/3] Caches antigos do 1º turno purgados do servidor com sucesso.');
+    res.json({
+      success: true,
+      message: 'Caches purgados do servidor com sucesso. Pronto para inserção das novas planilhas do 2º Turno!',
+      config: cleanCfg,
+    });
+  } catch (err: any) {
+    console.error('Erro ao limpar cache:', err);
     res.status(500).json({ success: false, message: err?.message });
   }
 });
@@ -130,6 +284,15 @@ app.get('/api/proxy-sheet', async (req, res) => {
       },
     });
     const text = await resp.text();
+    const lower = text.toLowerCase();
+    if (
+      lower.includes('accounts.google.com') ||
+      lower.includes('servicelogin') ||
+      lower.includes('google doc error') ||
+      lower.includes('fazer login')
+    ) {
+      return res.status(403).send('GOOGLE_SHEETS_RESTRICTED');
+    }
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(text);
   } catch (err: any) {

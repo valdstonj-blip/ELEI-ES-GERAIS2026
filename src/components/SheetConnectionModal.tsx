@@ -8,6 +8,8 @@ import {
   Upload,
   RefreshCw,
   ExternalLink,
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { CsvHelper } from '../lib/csvHelper';
 import {
@@ -17,6 +19,7 @@ import {
   parseFaltasCsv,
 } from '../services/sheetService';
 import { LocalVotacao, Ocorrencia, FaltaEfetivo } from '../types';
+import { INITIAL_OCORRENCIAS, INITIAL_FALTAS } from '../data/mockData';
 
 interface SheetConnectionModalProps {
   isOpen: boolean;
@@ -24,7 +27,9 @@ interface SheetConnectionModalProps {
   onLocaisUpdated: (data: LocalVotacao[]) => void;
   onOcorrenciasUpdated: (data: Ocorrencia[]) => void;
   onFaltasUpdated: (data: FaltaEfetivo[]) => void;
+  onVerificacaoUpdated?: (data: FaltaEfetivo[]) => void;
   onSyncAll?: () => void;
+  onReset2Turno?: () => void;
 }
 
 export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
@@ -33,15 +38,20 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
   onLocaisUpdated,
   onOcorrenciasUpdated,
   onFaltasUpdated,
+  onVerificacaoUpdated,
   onSyncAll,
+  onReset2Turno,
 }) => {
   const [locaisUrl, setLocaisUrl] = useState<string>(() => CsvHelper.getLocaisSheetUrl());
   const [ocorrenciasUrl, setOcorrenciasUrl] = useState<string>(() => CsvHelper.getOcorrenciasSheetUrl());
   const [faltasUrl, setFaltasUrl] = useState<string>(() => CsvHelper.getFaltasSheetUrl());
+  const [verificacaoUrl, setVerificacaoUrl] = useState<string>(() => CsvHelper.getVerificacaoSheetUrl());
 
-  const [testingSource, setTestingSource] = useState<'locais' | 'ocorrencias' | 'faltas' | null>(null);
+  const [testingSource, setTestingSource] = useState<'locais' | 'ocorrencias' | 'faltas' | 'verificacao' | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearSuccessMsg, setClearSuccessMsg] = useState<string | null>(null);
 
   // Recarrega URLs salvas sempre que o modal abre
   React.useEffect(() => {
@@ -49,6 +59,8 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
       setLocaisUrl(CsvHelper.getLocaisSheetUrl());
       setOcorrenciasUrl(CsvHelper.getOcorrenciasSheetUrl());
       setFaltasUrl(CsvHelper.getFaltasSheetUrl());
+      setVerificacaoUrl(CsvHelper.getVerificacaoSheetUrl());
+      setClearSuccessMsg(null);
     }
   }, [isOpen]);
 
@@ -56,10 +68,14 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
 
   const handleSaveUrls = async () => {
     setIsSaving(true);
+    const cleanFaltas = (faltasUrl.trim() || verificacaoUrl.trim());
+    const cleanVerif = (verificacaoUrl.trim() || faltasUrl.trim());
+
     await CsvHelper.saveAllSheetUrls({
-      locaisUrl,
-      ocorrenciasUrl,
-      faltasUrl,
+      locaisUrl: locaisUrl.trim(),
+      ocorrenciasUrl: ocorrenciasUrl.trim(),
+      faltasUrl: cleanFaltas,
+      verificacaoUrl: cleanVerif,
     });
     setIsSaving(false);
     if (onSyncAll) {
@@ -68,7 +84,29 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
     onClose();
   };
 
-  const handleTestUrl = async (source: 'locais' | 'ocorrencias' | 'faltas', url: string) => {
+  const handleClearCacheAndReset = async () => {
+    if (!window.confirm('Tem certeza que deseja limpar os caches do 1º turno e redefinir para o 2º Turno Oficial? Todas as ocorrências antigas serão removidas, deixando apenas os registros do 2º Turno.')) {
+      return;
+    }
+    setIsClearing(true);
+    await CsvHelper.clearAllCachesAndResetTo2Turno();
+    setOcorrenciasUrl('');
+    setFaltasUrl('');
+    setVerificacaoUrl('');
+    setTestResult({});
+    onOcorrenciasUpdated(INITIAL_OCORRENCIAS);
+    onFaltasUpdated(INITIAL_FALTAS);
+    if (onVerificacaoUpdated) {
+      onVerificacaoUpdated(INITIAL_FALTAS);
+    }
+    if (onReset2Turno) {
+      onReset2Turno();
+    }
+    setIsClearing(false);
+    setClearSuccessMsg('Caches purgados com sucesso! O sistema está pronto para as novas planilhas do 2º Turno.');
+  };
+
+  const handleTestUrl = async (source: 'locais' | 'ocorrencias' | 'faltas' | 'verificacao', url: string) => {
     if (!url || !url.trim().startsWith('http')) {
       setTestResult((prev) => ({
         ...prev,
@@ -77,9 +115,20 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
       return;
     }
 
+    if (url.includes('docs.google.com/forms/')) {
+      setTestResult((prev) => ({
+        ...prev,
+        [source]: {
+          success: false,
+          message: 'Atenção: Este é o link do FORMULÁRIO (Google Forms). Para conectar no sistema, abra a aba "Respostas" do formulário no Google, clique no ícone verde "Vincular ao Planilhas" e cole aqui o link da planilha gerada.',
+        },
+      }));
+      return;
+    }
+
     setTestingSource(source);
     try {
-      const csvText = await fetchCsvWithTimeout(url.trim(), 12000);
+      const csvText = await fetchCsvWithTimeout(url.trim(), 14000);
       let count = 0;
       if (source === 'locais') {
         const parsed = parseLocaisCsv(csvText);
@@ -95,7 +144,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
           ...prev,
           [source]: {
             success: true,
-            message: `Conexão bem-sucedida! ${count.toLocaleString('pt-BR')} locais carregados (${imp} urnas implantadas, ${desmob} desmobilizadas).`,
+            message: `Conexão bem-sucedida! ${count.toLocaleString('pt-BR')} locais carregados da aba selecionada (${imp} urnas implantadas, ${desmob} desmobilizadas).`,
           },
         }));
         return;
@@ -110,7 +159,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
           ...prev,
           [source]: {
             success: true,
-            message: `Conexão bem-sucedida! ${count} ocorrência(s) encontrada(s) na planilha (${tipoDet}).`,
+            message: `Conexão bem-sucedida! ${count} ocorrência(s) do 2º Turno encontrada(s) (${tipoDet}).`,
           },
         }));
         return;
@@ -120,21 +169,52 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
         onFaltasUpdated(parsed);
         CsvHelper.saveFaltas(parsed);
         CsvHelper.setFaltasSheetUrl(url.trim());
+        if (onVerificacaoUpdated) {
+          onVerificacaoUpdated(parsed);
+        }
+        CsvHelper.saveVerificacao(parsed);
+        CsvHelper.setVerificacaoSheetUrl(url.trim());
         setTestResult((prev) => ({
           ...prev,
           [source]: {
             success: true,
-            message: `Conexão bem-sucedida! ${count} registro(s) de envio do formulário POE carregado(s).`,
+            message: `Conexão bem-sucedida! ${count} registro(s) de faltas do 2º Turno carregado(s) e sincronizado(s) em ambas as abas.`,
+          },
+        }));
+        return;
+      } else if (source === 'verificacao') {
+        const parsed = parseFaltasCsv(csvText);
+        count = parsed.length;
+        if (onVerificacaoUpdated) {
+          onVerificacaoUpdated(parsed);
+        }
+        CsvHelper.saveVerificacao(parsed);
+        CsvHelper.setVerificacaoSheetUrl(url.trim());
+        onFaltasUpdated(parsed);
+        CsvHelper.saveFaltas(parsed);
+        CsvHelper.setFaltasSheetUrl(url.trim());
+        setTestResult((prev) => ({
+          ...prev,
+          [source]: {
+            success: true,
+            message: `Conexão bem-sucedida! ${count} registro(s) depurado(s) carregado(s) e sincronizado(s) com a Aba de Faltas.`,
           },
         }));
         return;
       }
     } catch (err: any) {
+      const errMsg = err?.message || '';
+      let friendlyMsg = 'Falha ao acessar link. Verifique se a planilha está compartilhada com permissão de leitura.';
+      if (errMsg.includes('RESTRICTED') || errMsg.includes('Restrito')) {
+        friendlyMsg = 'Acesso restrito no Google Drive. Na sua planilha do Google, clique no botão azul "Compartilhar" (topo direito), mude o Acesso Geral para "Qualquer pessoa com o link" (Leitor) e salve novamente.';
+      } else if (errMsg.includes('404')) {
+        friendlyMsg = 'Planilha não encontrada (Erro 404). Verifique o endereço digitado.';
+      }
       setTestResult((prev) => ({
         ...prev,
         [source]: {
           success: false,
-          message: err?.message || 'Falha ao acessar link. Verifique se o link foi publicado como CSV no Google.',
+          message: friendlyMsg,
         },
       }));
     } finally {
@@ -164,7 +244,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
               ...prev,
               [source]: {
                 success: true,
-                message: `Arquivo importado: ${parsed.length} locais carregados com sucesso!`,
+                message: `Arquivo importado: ${parsed.length.toLocaleString('pt-BR')} locais carregados!`,
               },
             }));
           }
@@ -177,7 +257,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
               ...prev,
               [source]: {
                 success: true,
-                message: `Arquivo importado: ${parsed.length} ocorrências carregadas!`,
+                message: `Arquivo importado: ${parsed.length} ocorrências do 2º Turno carregadas!`,
               },
             }));
           }
@@ -186,11 +266,15 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
           if (parsed.length > 0) {
             onFaltasUpdated(parsed);
             CsvHelper.saveFaltas(parsed);
+            if (onVerificacaoUpdated) {
+              onVerificacaoUpdated(parsed);
+            }
+            CsvHelper.saveVerificacao(parsed);
             setTestResult((prev) => ({
               ...prev,
               [source]: {
                 success: true,
-                message: `Arquivo importado: ${parsed.length} registros de efetivo carregados!`,
+                message: `Arquivo importado: ${parsed.length} registros de faltas do 2º Turno carregados e sincronizados!`,
               },
             }));
           }
@@ -198,7 +282,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
       } catch (err: any) {
         setTestResult((prev) => ({
           ...prev,
-          [source]: { success: false, message: `Erro ao ler arquivo: ${err.message}` },
+          [source]: { success: false, message: `Erro ao ler arquivo: ${err?.message}` },
         }));
       }
     };
@@ -215,11 +299,14 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-black tracking-tight uppercase">
-                Conexão com Planilhas Google & Importação Direta
+              <h2 className="text-base font-black tracking-tight uppercase flex items-center gap-2">
+                <span>Links & Planilhas Oficiais (2º Turno)</span>
+                <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full">
+                  Persistência Permanente no Servidor
+                </span>
               </h2>
               <p className="text-xs text-slate-400">
-                Gerencie os links publicados das 3 bases de dados ou importe arquivos CSV locais
+                Gerencie os links das planilhas Google do 2º Turno ou importe arquivos CSV locais
               </p>
             </div>
           </div>
@@ -232,48 +319,50 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
           {/* Banner de Fixação Efetiva no Sistema */}
-          <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-emerald-950 shadow-xs">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <span className="font-extrabold text-emerald-900 block uppercase tracking-wide text-[11px]">
-                Links Fixados Efetivamente no Sistema (Servidor Central)
-              </span>
-              <p className="text-[11px] text-emerald-800 leading-relaxed">
-                Os links configurados abaixo são salvos de forma permanente no servidor central. Ao abrir o sistema em outro navegador, computador ou celular, as planilhas já estarão conectadas automaticamente sem necessidade de reinserir links.
-              </p>
+          <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-start justify-between gap-3 text-xs text-emerald-950 shadow-xs">
+            <div className="flex items-start gap-2.5">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-extrabold text-emerald-900 block uppercase tracking-wide text-[11px]">
+                  Persistência Central no Servidor Ativa
+                </span>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  Os links e dados são salvos em arquivos dedicados no servidor central. Ao salvar abaixo, a configuração é fixada permanentemente para todos os aparelhos e navegadores.
+                </p>
+              </div>
             </div>
+
+            {/* Botão de Limpeza dos Caches do 1º Turno */}
+            <button
+              type="button"
+              onClick={handleClearCacheAndReset}
+              disabled={isClearing}
+              className="px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 font-bold text-[11px] flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+              title="Remove registros do 1º turno (87 ocorrências) e redefine para 1 dado de teste do 2º turno"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+              <span>{isClearing ? 'Limpando...' : 'Limpar Caches do 1º Turno'}</span>
+            </button>
           </div>
 
-          {/* Instruções Técnicas */}
-          <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-950 space-y-2">
-            <div className="font-bold flex items-center gap-1.5 text-amber-900">
-              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
-              <span>Como vincular a aba "PLANILHA GERAL DASH" (+5.000 locais) e não apenas 1º CPA (608):</span>
+          {clearSuccessMsg && (
+            <div className="bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs p-3 rounded-xl flex items-center gap-2 font-medium">
+              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{clearSuccessMsg}</span>
             </div>
-            <div className="text-[11px] text-amber-900 leading-relaxed space-y-1.5 pl-5.5">
-              <p>
-                <strong>Método 1 (Mais fácil - Link do Navegador):</strong> Abra a planilha no Google Sheets, clique na aba <strong>PLANILHA GERAL DASH</strong> no rodapé. Copie o endereço completo da barra do navegador (ex: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.../edit#gid=123456789</code>) e cole abaixo. O sistema identifica o <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">gid</code> da aba automaticamente e busca os +5.000 locais!
-              </p>
-              <p>
-                <strong>Método 2 (Publicar na Web):</strong> No Google Sheets, vá em <strong>Arquivo ➔ Compartilhar ➔ Publicar na Web</strong>. No menu que diz "Documento inteiro" ou "1º CPA", selecione <strong>"PLANILHA GERAL DASH"</strong> ➔ Formato: <strong>Valores separados por vírgula (.csv)</strong> ➔ Clique em <strong>Publicar</strong>.
-              </p>
-              <p>
-                <strong>Método 3 (Instantâneo sem link):</strong> Se não puder mexer nas permissões do Google, basta clicar no botão <strong>"Subir CSV"</strong> e escolher o arquivo CSV baixado do Google Sheets.
-              </p>
-            </div>
-          </div>
+          )}
 
-          {/* 1. Locais de Votação */}
+          {/* 1. Locais de Votação (Aba 2º Turno) */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                  1. Planilha Geral Dash (Locais de Votação)
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <span>1. Planilha de Locais de Votação (Aba do 2º Turno)</span>
                 </span>
                 <p className="text-[11px] text-slate-500">
-                  Base principal de locais, zonas eleitorais, implantação e áreas sensíveis
+                  Mesma planilha do Google com a aba do 2º Turno (ex: cole o link completo com o <code className="bg-slate-200 px-1 rounded text-slate-700 font-mono">#gid=...</code> da nova aba)
                 </p>
               </div>
               <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-colors">
@@ -293,7 +382,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
                 type="text"
                 value={locaisUrl}
                 onChange={(e) => setLocaisUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+                placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=NOVO_GID_2_TURNO"
                 className="flex-1 text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               />
               <button
@@ -325,15 +414,16 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
             )}
           </div>
 
-          {/* 2. Ocorrências */}
+          {/* 2. Ocorrências (2º Turno Oficial) */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                  2. Planilha de Respostas do Formulário de Ocorrências
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <span>2. Planilha de Respostas de Ocorrências (2º Turno)</span>
+                  <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-bold">Nova Planilha</span>
                 </span>
                 <p className="text-[11px] text-slate-500">
-                  Respostas registradas pelos operadores no Formulário Google de Ocorrências
+                  Respostas do novo Formulário Google de Ocorrências (atualmente com 1 registro de teste enviado)
                 </p>
               </div>
               <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-colors">
@@ -353,7 +443,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
                 type="text"
                 value={ocorrenciasUrl}
                 onChange={(e) => setOcorrenciasUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+                placeholder="Cole o novo link do Google Sheets de Ocorrências do 2º Turno..."
                 className="flex-1 text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               />
               <button
@@ -385,15 +475,16 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
             )}
           </div>
 
-          {/* 3. Faltas de Efetivo POE */}
+          {/* 3. Faltas de Efetivo POE (2º Turno Oficial) */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                  3. Planilha de Respostas de Faltas no POE
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <span>3. Planilha de Respostas de Faltas no POE (2º Turno)</span>
+                  <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-bold">Nova Planilha</span>
                 </span>
                 <p className="text-[11px] text-slate-500">
-                  Respostas registradas pelo formulário de controle de faltas no POE
+                  Respostas do novo Formulário Google de Faltas no POE (atualmente com 1 registro de teste enviado)
                 </p>
               </div>
               <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-colors">
@@ -413,7 +504,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
                 type="text"
                 value={faltasUrl}
                 onChange={(e) => setFaltasUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+                placeholder="Cole o novo link do Google Sheets de Faltas do 2º Turno..."
                 className="flex-1 text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               />
               <button
@@ -449,7 +540,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
         {/* Footer */}
         <div className="bg-slate-100 px-6 py-3.5 border-t border-slate-200 flex items-center justify-between">
           <span className="text-[11px] text-slate-500">
-            Gravado permanentemente no servidor para computadores e celulares.
+            Fixação permanente no servidor para todos os navegadores e celulares.
           </span>
           <div className="flex items-center gap-2">
             <button

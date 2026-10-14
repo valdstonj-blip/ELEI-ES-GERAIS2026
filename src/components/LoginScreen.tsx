@@ -17,9 +17,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     setTimeout(() => {
-      // Credenciais acordadas: admin / admin (modificáveis a qualquer momento via solicitação)
-      if (username.trim().toLowerCase() === 'admin' && password === 'admin') {
+      const u = username.trim().toLowerCase();
+      // Credenciais acordadas:
+      // - admin / admin: Acesso total (visualiza e gerencia os links das planilhas)
+      // - pm3 / pm3: Acesso operacional (visualiza dados, mas links de planilhas e conexão ficam 100% ocultos)
+      if (u === 'admin' && password === 'admin') {
         localStorage.setItem('eleicoes2026_auth', 'true');
+        localStorage.setItem('eleicoes2026_role', 'admin');
+        onLoginSuccess();
+      } else if (u === 'pm3' && password === 'pm3') {
+        localStorage.setItem('eleicoes2026_auth', 'true');
+        localStorage.setItem('eleicoes2026_role', 'pm3');
         onLoginSuccess();
       } else {
         setError('Usuário ou senha incorretos.');

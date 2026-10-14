@@ -23,6 +23,7 @@ import {
   CheckSquare,
   FileSpreadsheet,
   Zap,
+  Calendar,
 } from 'lucide-react';
 import { LocalVotacao } from '../types';
 import { exportLocaisPdf } from '../services/pdfService';
@@ -213,7 +214,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
     return baseLocais.filter((l) => l.isDuplicado).length;
   }, [baseLocais]);
 
-  // 1. Acompanhamento Operacional de SÁBADO (03/OUT - Véspera / Sem necessidade no domingo)
+  // 1. Acompanhamento Operacional de SÁBADO (24/OUT - Véspera / Implantação sem necessidade no domingo)
   const locaisSabado = useMemo(() => {
     return baseLocais.filter((l) => !(isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo)));
   }, [baseLocais]);
@@ -222,7 +223,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
   const sabadoPendentes = sabadoTotal - sabadoImplantadas;
   const sabadoPct = sabadoTotal > 0 ? ((sabadoImplantadas / sabadoTotal) * 100).toFixed(1) : '0.0';
 
-  // 2. Acompanhamento Operacional de DOMINGO (04/OUT - Pleito / Com necessidade no domingo)
+  // 2. Acompanhamento Operacional de DOMINGO (25/OUT - Pleito 2º Turno / Com necessidade no domingo)
   const locaisDomingo = useMemo(() => {
     return baseLocais.filter((l) => isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo));
   }, [baseLocais]);
@@ -329,6 +330,43 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
 
   return (
     <div id="locais-votacao-dashboard" className="space-y-4">
+      {/* BANNER OFICIAL: ELEIÇÕES 2026 - 2º TURNO */}
+      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-blue-900/60 rounded-xl p-3 text-white shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-blue-600/30 border border-blue-500/40 text-blue-300 shrink-0">
+            <Calendar className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
+                2º Turno Oficial
+              </span>
+              <span className="text-xs font-bold text-slate-300">
+                Operação Eleições 2026 • EMG-PM/3
+              </span>
+            </div>
+            <h2 className="text-sm md:text-base font-black tracking-tight text-white mt-0.5">
+              CRONOGRAMA DO 2º TURNO: 24 (SÁBADO) E 25 (DOMINGO) DE OUTUBRO
+            </h2>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-700/60 text-emerald-200">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span><strong>24/OUT (SÁB):</strong> Implantação de Urnas</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/80 border border-blue-700/60 text-blue-200">
+            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+            <span><strong>25/OUT (DOM):</strong> Pleito Eleitoral</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-200">
+            <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+            <span><strong>25/OUT (DOM):</strong> Desmobilização Geral</span>
+          </div>
+        </div>
+      </div>
+
       {/* 1. INDICADORES CLAROS E MODERNOS (RESPONDENDO ÀS PERGUNTAS OPERACIONAIS) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         {/* Card 1: Locais de Votação */}
@@ -418,11 +456,11 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
           </div>
           <div className="mt-2 flex items-baseline justify-between text-xs font-bold">
             <div>
-              <span className="text-[9px] text-slate-500 block">03OUT (SÁB)</span>
+              <span className="text-[9px] text-slate-500 block">24OUT (SÁB)</span>
               <span className="text-sm font-black text-blue-800">{totalEfSab.toLocaleString('pt-BR')}</span>
             </div>
             <div className="text-right">
-              <span className="text-[9px] text-slate-500 block">04OUT (DOM)</span>
+              <span className="text-[9px] text-slate-500 block">25OUT (DOM)</span>
               <span className="text-sm font-black text-emerald-800">{totalEfDom.toLocaleString('pt-BR')}</span>
             </div>
           </div>
@@ -470,7 +508,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                   <PlayCircle className="w-4 h-4 text-emerald-700" />
                 </span>
                 <div>
-                  <span className="text-[9px] font-bold text-emerald-800 uppercase block">03/OUT (Sábado)</span>
+                  <span className="text-[9px] font-bold text-emerald-800 uppercase block">24/OUT (Sábado)</span>
                   <h4 className="text-xs font-black text-slate-900">IMPLANTAÇÃO SÁBADO</h4>
                 </div>
               </div>
@@ -546,7 +584,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                   <Clock className="w-4 h-4 text-amber-700" />
                 </span>
                 <div>
-                  <span className="text-[9px] font-bold text-amber-800 uppercase block">04/OUT (Domingo)</span>
+                  <span className="text-[9px] font-bold text-amber-800 uppercase block">25/OUT (Domingo)</span>
                   <h4 className="text-xs font-black text-slate-900">IMPLANTAÇÃO DOMINGO</h4>
                 </div>
               </div>
@@ -697,7 +735,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                   <StopCircle className="w-4 h-4 text-indigo-700" />
                 </span>
                 <div>
-                  <span className="text-[9px] font-bold text-indigo-800 uppercase block">Término do Pleito</span>
+                  <span className="text-[9px] font-bold text-indigo-800 uppercase block">25/OUT (DOM) • Término do Pleito</span>
                   <h4 className="text-xs font-black text-slate-900">DESMOBILIZAÇÃO</h4>
                 </div>
               </div>

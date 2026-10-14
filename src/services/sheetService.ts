@@ -117,11 +117,19 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
       const keyBlindado = Object.keys(row).find((k) => k.toUpperCase().includes('BLINDADO'));
       const blindadoRaw = keyBlindado ? row[keyBlindado] : (row['UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA(SIM/NÃO)'] || row['UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA (SIM / NÃO)'] || row['BLINDADO']);
 
-      // Personnel
-      const keySabado = Object.keys(row).find((k) => k.toUpperCase().includes('03OUT') || k.toUpperCase().includes('SÁBADO') || k.toUpperCase().includes('SABADO'));
-      const keyDomingo = Object.keys(row).find((k) => k.toUpperCase().includes('04OUT') || (k.toUpperCase().includes('DOMINGO') && k.toUpperCase().includes('EFETIVO')));
-      const efetivoSabado = parseNumber(keySabado ? row[keySabado] : (row['EFETIVO DIA 03OUT26'] || row['EFETIVO_SABADO']));
-      const efetivoDomingo = parseNumber(keyDomingo ? row[keyDomingo] : (row['EFETIVO DIA 04OUT26'] || row['EFETIVO_DOMINGO']));
+      // Personnel (suporta 2º Turno 24OUT/25OUT e 1º Turno 03OUT/04OUT ou cabeçalhos por extenso de SÁBADO e DOMINGO)
+      const keySabado = Object.keys(row).find((k) => {
+        const u = k.toUpperCase();
+        return u.includes('24OUT') || u.includes('03OUT') || ((u.includes('SÁBADO') || u.includes('SABADO')) && u.includes('EFETIVO'));
+      }) || Object.keys(row).find((k) => k.toUpperCase().includes('SÁBADO') || k.toUpperCase().includes('SABADO'));
+
+      const keyDomingo = Object.keys(row).find((k) => {
+        const u = k.toUpperCase();
+        return u.includes('25OUT') || u.includes('04OUT') || ((u.includes('DOMINGO')) && u.includes('EFETIVO'));
+      }) || Object.keys(row).find((k) => k.toUpperCase().includes('DOMINGO'));
+
+      const efetivoSabado = parseNumber(keySabado ? row[keySabado] : (row['EFETIVO DIA 24OUT26'] || row['EFETIVO DIA 03OUT26'] || row['EFETIVO_SABADO']));
+      const efetivoDomingo = parseNumber(keyDomingo ? row[keyDomingo] : (row['EFETIVO DIA 25OUT26'] || row['EFETIVO DIA 04OUT26'] || row['EFETIVO_DOMINGO']));
 
       const keyObs = Object.keys(row).find((k) => k.toUpperCase().includes('OBS'));
       const observacoes = String(keyObs ? row[keyObs] : (row['OBSERVAÇÕS E ALTERAÇÕES'] || row['OBSERVAÇÕES E ALTERAÇÕES'] || '')).trim();
@@ -600,9 +608,14 @@ export function parseOcorrenciasCsv(csvText: string): Ocorrencia[] {
       historico: dinamica,
       providencias: `BOPM: ${bopm} | RO: ${ro}`,
       envolvidos: 'Em apuração',
-      materialApreendido: 'Nenhum',
       status: seHouverOcorrenciaDizerQual === 'Não houve' ? ('SEM ALTERAÇÃO' as const) : ('CONCLUÍDA' as const),
     };
+  }).filter((o) => {
+    // Exclui estritamente registros do 1º Turno (03/10 e 04/10)
+    const s = `${o.carimbo || ''} ${o.servicoDia || ''} ${o.dataHoraFato || ''} ${o.dinamica || ''}`.toLowerCase();
+    const is1oTurno = (s.includes('03/10') || s.includes('03out') || s.includes('04/10') || s.includes('04out')) &&
+                      !(s.includes('24/10') || s.includes('25/10') || s.includes('24out') || s.includes('25out'));
+    return !is1oTurno;
   });
 }
 
@@ -803,11 +816,17 @@ export function parseFaltasCsv(csvText: string): FaltaEfetivo[] {
       const nomeInf = String(row['Nome de Guerra'] || row['NOME_GUERRA'] || '').trim();
       const informante = [postoInf, nomeInf, rgInf ? `(RG: ${rgInf})` : ''].filter(Boolean).join(' ');
 
+      const email = String(row['Endereço de e-mail'] || row['Endereço de email'] || row['Email'] || row['EMAIL'] || '').trim();
       const rawCpa = String(row['COMANDO INTERMEDIÁRIO'] || row['COMANDO INTERMEDIARIO'] || row['CPA'] || '2° CPA').trim();
       const cpa = normalizeCpaName(rawCpa);
       const opmDestino = String(row['OPM'] || row['UOP'] || '9º BPM').trim();
 
-      const dataStr = servicoDia.includes('03OUT') ? '03/10/2026' : (servicoDia.includes('04OUT') ? '04/10/2026' : '04/10/2026');
+      const dataStr =
+        servicoDia.includes('24OUT') || servicoDia.includes('24/10')
+          ? '24/10/2026'
+          : servicoDia.includes('25OUT') || servicoDia.includes('25/10')
+          ? '25/10/2026'
+          : '24/10/2026';
       const turnoStr = servicoDia || 'Serviço POE Eleições';
 
       // 1. Processar FALTAS NO POE
@@ -829,6 +848,7 @@ export function parseFaltasCsv(csvText: string): FaltaEfetivo[] {
         opm: opmDestino,
         faltasPoe: faltasRaw || 'sem alteração',
         dispensasPoe: dispensasRaw || 'sem alteração',
+        email,
 
         // Compatibilidade
         data: dataStr,
@@ -879,6 +899,13 @@ export function normalizeGoogleSheetsUrl(url: string): { primary: string; fallba
   if (!url) return { primary: '', fallbacks: [] };
   const trimmed = url.trim();
 
+  // Detecção amigável se o usuário colou o link do Formulário Google em vez da planilha de respostas
+  if (trimmed.includes('docs.google.com/forms/')) {
+    throw new Error(
+      'Você informou o link do Formulário Google, e não da Planilha de Respostas. Para obter a planilha correta: abra o seu Formulário Google, clique na aba superior "Respostas", clique no ícone verde "Ver no Planilhas" (ou "Vincular ao Planilhas"), e copie o link da planilha aberta no navegador.'
+    );
+  }
+
   // Caso 1: Publicado na web com token 2PACX (/d/e/2PACX-...)
   const pubMatch = trimmed.match(/docs\.google\.com\/spreadsheets\/d\/e\/(2PACX-[a-zA-Z0-9_-]+)/);
   if (pubMatch) {
@@ -895,30 +922,34 @@ export function normalizeGoogleSheetsUrl(url: string): { primary: string; fallba
     };
   }
 
-  // Caso 2: URL de planilha do Google (/d/SPREADSHEET_ID)
-  const docMatch = trimmed.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  // Caso 2: URL de planilha do Google (/d/SPREADSHEET_ID) com suporte a /u/0/d/, /u/1/d/, etc.
+  const docMatch = trimmed.match(/docs\.google\.com\/spreadsheets\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/);
   if (docMatch && docMatch[1] !== 'e') {
     const sheetId = docMatch[1];
     const gidMatch = trimmed.match(/[?&#]gid=([0-9]+)/);
-    let gid = gidMatch ? gidMatch[1] : '';
-
-    // Mapeamento automático inteligente das abas oficiais se o operador colar URL sem gid ou com gid=0
-    if (!gid || gid === '0') {
-      if (sheetId === '1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE') {
-        gid = '2054351637'; // Aba de Respostas do Formulário de Ocorrências
-      } else if (sheetId === '1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8') {
-        gid = '613414577'; // Aba de Respostas do Formulário de Faltas
-      } else if (sheetId === '1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw') {
-        gid = '907029771'; // Aba PLANILHA GERAL DASH
-      } else {
-        gid = '0';
-      }
-    }
+    // Preserva rigorosamente o gid fornecido pelo usuário (ex: aba do 2º Turno)
+    const gid = gidMatch ? gidMatch[1] : '';
+    const gidParam = gid ? `&gid=${gid}` : '';
 
     return {
-      primary: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
+      primary: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`,
       fallbacks: [
-        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gidParam}`,
+      ],
+    };
+  }
+
+  // Caso 3: Links do Google Drive (drive.google.com/file/d/ID ou open?id=ID)
+  const driveMatch = trimmed.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/);
+  if (driveMatch) {
+    const sheetId = driveMatch[1];
+    const gidMatch = trimmed.match(/[?&#]gid=([0-9]+)/);
+    const gid = gidMatch ? gidMatch[1] : '';
+    const gidParam = gid ? `&gid=${gid}` : '';
+    return {
+      primary: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`,
+      fallbacks: [
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gidParam}`,
       ],
     };
   }
@@ -933,7 +964,7 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
   let hadLoginRedirect = false;
 
   const isValidCsv = (text: string) => {
-    if (!text || text.trim().length < 50) return false;
+    if (!text || text.trim().length < 20) return false;
     const lower = text.toLowerCase().trim();
     if (
       lower.includes('accounts.google.com') ||
@@ -948,14 +979,39 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
     if (lower.startsWith('<!doctype') || lower.startsWith('<html') || lower.includes('page not found')) {
       return false;
     }
-    return text.includes(',') || text.includes(';') || text.includes('\t');
+    return text.includes(',') || text.includes(';') || text.includes('\t') || text.includes('\n');
   };
 
   for (const candidate of candidates) {
     const sep = candidate.includes('?') ? '&' : '?';
     const cleanUrl = `${candidate}${sep}_t=${Date.now()}`;
 
-    // 1. Tentativa Direta
+    // 1. Tentativa via Proxy Local do Servidor (/api/proxy-sheet) - Prioritário para evitar bloqueios de CORS do navegador
+    try {
+      const localProxyUrl = `/api/proxy-sheet?url=${encodeURIComponent(cleanUrl)}`;
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+
+      const proxyResp = await fetch(localProxyUrl, {
+        signal: controller.signal,
+      });
+      clearTimeout(id);
+
+      if (proxyResp.status === 403) {
+        hadLoginRedirect = true;
+      } else if (proxyResp.ok) {
+        const text = await proxyResp.text();
+        if (text === 'GOOGLE_SHEETS_RESTRICTED') {
+          hadLoginRedirect = true;
+        } else if (isValidCsv(text)) {
+          return text;
+        }
+      }
+    } catch {
+      // Ignorar e tentar direto / outros proxies
+    }
+
+    // 2. Tentativa Direta (funciona para planilhas publicadas na web)
     try {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -979,31 +1035,10 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
         }
       }
     } catch {
-      // Ignorar e tentar proxy local
-    }
-
-    // 1.5. Tentativa via Proxy Local do Servidor (/api/proxy-sheet)
-    try {
-      const localProxyUrl = `/api/proxy-sheet?url=${encodeURIComponent(cleanUrl)}`;
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), timeoutMs);
-
-      const proxyResp = await fetch(localProxyUrl, {
-        signal: controller.signal,
-      });
-      clearTimeout(id);
-
-      if (proxyResp.ok) {
-        const text = await proxyResp.text();
-        if (isValidCsv(text)) {
-          return text;
-        }
-      }
-    } catch {
       // Ignorar e tentar proxies públicos
     }
 
-    // 2. Tentativa via Proxy CORS 1 (AllOrigins)
+    // 3. Tentativa via Proxy CORS 1 (AllOrigins)
     try {
       const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanUrl)}`;
       const controller = new AbortController();
@@ -1024,7 +1059,7 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
       // Ignorar e tentar próximo
     }
 
-    // 3. Tentativa via Proxy CORS 2 (CorsProxy)
+    // 4. Tentativa via Proxy CORS 2 (CorsProxy)
     try {
       const proxyUrl2 = `https://corsproxy.io/?url=${encodeURIComponent(cleanUrl)}`;
       const controller = new AbortController();
@@ -1047,10 +1082,14 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
   }
 
   if (hadLoginRedirect) {
-    throw new Error('GOOGLE_SHEETS_RESTRICTED: Acesso Restrito no Google Drive. No Google Sheets, clique em Compartilhar e marque "Qualquer pessoa com o link" (Leitor).');
+    throw new Error(
+      'A planilha do Google está com ACESSO RESTRITO. Para liberar o acesso do sistema: abra a planilha no Google Sheets, clique no botão azul "Compartilhar" (no canto superior direito) e mude de "Restrito" para "Qualquer pessoa com o link" (Leitor).'
+    );
   }
 
-  throw new Error('Não foi possível ler os dados da planilha Google Sheets. Verifique se o link está acessível ou publicado na web.');
+  throw new Error(
+    'Não foi possível ler os dados da planilha Google Sheets. Verifique se o link está acessível no Google Drive e compartilhado com permissão de Leitura.'
+  );
 }
 
 export const StorageService = {
