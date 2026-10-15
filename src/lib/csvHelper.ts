@@ -14,11 +14,12 @@ import { INITIAL_OCORRENCIAS, INITIAL_FALTAS } from '../data/mockData';
 export const DEFAULT_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit';
 
-// No 2º Turno Oficial, as URLs de Ocorrências e Faltas começam limpas para receberem os novos links do 2º Turno
-// NUNCA recarrega as planilhas do 1º Turno (que continham as 87 ocorrências)
+// URLs oficiais do 2º Turno Oficial
 export const DEFAULT_OCORRENCIAS_URL = '';
-export const DEFAULT_FALTAS_URL = '';
-export const DEFAULT_VERIFICACAO_URL = '';
+export const DEFAULT_FALTAS_URL =
+  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
+export const DEFAULT_VERIFICACAO_URL =
+  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
 
 export const SHEET_URLS = {
   PLANILHA_1_LOCAIS: DEFAULT_SHEET_URL,

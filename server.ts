@@ -19,13 +19,16 @@ const OCORRENCIAS_DATA_FILE = path.resolve(__dirname, 'ocorrencias-data.json');
 const FALTAS_DATA_FILE = path.resolve(__dirname, 'faltas-data.json');
 const VERIFICACAO_DATA_FILE = path.resolve(__dirname, 'verificacao-data.json');
 
+// Link fixo e oficial da Planilha de Faltas do 2º Turno (para todo o evento)
+const OFFICIAL_FALTAS_URL =
+  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
+
 // Configuração Padrão do 2º Turno Oficial (24 e 25 de Outubro)
-// Não pré-carrega URLs do 1º Turno (evita recuperar as 87 ocorrências antigas)
 const DEFAULT_CONFIG = {
-  locaisUrl: 'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit',
-  ocorrenciasUrl: '',
-  faltasUrl: '',
-  verificacaoUrl: '',
+  locaisUrl: 'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit?gid=580074849#gid=580074849',
+  ocorrenciasUrl: 'https://docs.google.com/spreadsheets/d/1mjwbWLqU3rpnMtyHyKJzqj1u0cKrb3Hdx-Rx2BBNkGc/edit?gid=1689465461#gid=1689465461',
+  faltasUrl: OFFICIAL_FALTAS_URL,
+  verificacaoUrl: OFFICIAL_FALTAS_URL,
   updatedAt: new Date().toISOString(),
 };
 
@@ -34,14 +37,18 @@ function readConfig() {
     if (fs.existsSync(CONFIG_FILE)) {
       const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      // Limpeza de segurança: se o arquivo no disco ainda tiver os links antigos do 1º turno com as 87 ocorrências, anula-os
       if (parsed.ocorrenciasUrl && parsed.ocorrenciasUrl.includes('1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE')) {
         parsed.ocorrenciasUrl = '';
       }
-      if (parsed.faltasUrl && parsed.faltasUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8') && parsed.faltasUrl.includes('613414577')) {
-        parsed.faltasUrl = '';
+      if (parsed.faltasUrl && parsed.faltasUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')) {
+        parsed.faltasUrl = OFFICIAL_FALTAS_URL;
       }
-      return { ...DEFAULT_CONFIG, ...parsed };
+      return {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        faltasUrl: parsed.faltasUrl || OFFICIAL_FALTAS_URL,
+        verificacaoUrl: parsed.verificacaoUrl || OFFICIAL_FALTAS_URL,
+      };
     }
   } catch (err) {
     console.error('Erro ao ler sheet-config.json:', err);
@@ -57,6 +64,137 @@ function writeConfig(config: any) {
     console.error('Erro ao salvar sheet-config.json:', err);
     return false;
   }
+}
+
+function parseCsvRows(text: string): string[][] {
+  const p: string[][] = [];
+  let row: string[] = [];
+  let col = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (c === '"') {
+      if (inQuotes && next === '"') {
+        col += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      row.push(col.trim());
+      col = '';
+    } else if ((c === '\r' || c === '\n') && !inQuotes) {
+      if (c === '\r' && next === '\n') i++;
+      row.push(col.trim());
+      col = '';
+      if (row.some((cell) => cell.length > 0)) {
+        p.push(row);
+      }
+      row = [];
+    } else {
+      col += c;
+    }
+  }
+  if (col.length > 0 || row.length > 0) {
+    row.push(col.trim());
+    if (row.some((cell) => cell.length > 0)) {
+      p.push(row);
+    }
+  }
+  return p;
+}
+
+function normalizeCpaName(raw: string): string {
+  if (!raw) return '1º CPA';
+  const upper = raw.trim().toUpperCase();
+  if (upper.includes('CPP')) return 'CPP';
+  if (upper.includes('COE')) return 'COE';
+  if (upper.includes('CPE')) return 'CPE';
+  const match = upper.match(/([1-8])/);
+  if (match) return `${match[1]}º CPA`;
+  return raw.trim();
+}
+
+async function fetchLiveFaltasFromGoogle(targetUrl?: string): Promise<any[]> {
+  const urlToUse = targetUrl || readConfig().faltasUrl || OFFICIAL_FALTAS_URL;
+  if (!urlToUse || !urlToUse.includes('docs.google.com/spreadsheets/d/')) {
+    return [];
+  }
+  const match = urlToUse.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) return [];
+  const sheetId = match[1];
+  const gidMatch = urlToUse.match(/[?&#]gid=([0-9]+)/);
+  const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : '';
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
+
+  try {
+    const resp = await fetch(exportUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+    if (!resp.ok) return [];
+    const text = await resp.text();
+    if (!text || text.length < 50 || text.includes('accounts.google.com')) return [];
+
+    const rows = parseCsvRows(text);
+    if (rows.length < 2) return [];
+
+    const parsed: any[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const carimbo = row[0] || '';
+      const email = row[1] || '';
+      const servicoDia = row[2] || '';
+      const posto = row[3] || '';
+      const rg = row[4] || '';
+      const nomeGuerra = row[5] || '';
+      const cpaRaw = row[6] || '';
+      const opm = row[7] || '';
+      const faltasPoe = row[8] || '';
+
+      if (!nomeGuerra && !rg && !faltasPoe) continue;
+
+      const cpa = normalizeCpaName(cpaRaw);
+      parsed.push({
+        id: `falta-resp-${i}`,
+        carimbo,
+        email,
+        servicoDia,
+        posto,
+        rg,
+        nomeGuerra,
+        comandoIntermediario: cpa,
+        opm,
+        faltasPoe,
+        dispensasPoe: 'sem alteração',
+        data: '24/10/2026',
+        turno: servicoDia,
+        postoGrad: posto,
+        opmOrigem: `${cpa} / ${opm}`,
+        uopDestino: opm,
+        localVotacao: 'POE - Escala Operacional',
+        motivo: faltasPoe,
+        substituto: 'sem alteração',
+        status: 'REGISTRADO',
+        cpa,
+        tipoRegistro: 'FALTA',
+        informante: `${posto} ${nomeGuerra} (RG: ${rg})`.trim(),
+      });
+    }
+
+    if (parsed.length > 0) {
+      fs.writeFileSync(FALTAS_DATA_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+      fs.writeFileSync(VERIFICACAO_DATA_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+      console.log(`[EMG-PM/3] Sincronização direta com Google Sheets concluída com sucesso: ${parsed.length} envios salvos.`);
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('[EMG-PM/3] Aviso ao sincronizar Google Sheets remotamente:', err);
+  }
+  return [];
 }
 
 // 1. Configuração ativa de planilhas (Links do Sistema)
@@ -158,7 +296,12 @@ app.post('/api/ocorrencias', (req, res) => {
 });
 
 // 4. Persistência de Faltas no POE (2º Turno Oficial)
-app.get('/api/faltas', (_req, res) => {
+app.get('/api/faltas', async (req, res) => {
+  const forceSync = req.query.sync === 'true' || !fs.existsSync(FALTAS_DATA_FILE);
+  if (forceSync) {
+    await fetchLiveFaltasFromGoogle();
+  }
+
   try {
     if (fs.existsSync(FALTAS_DATA_FILE)) {
       const raw = fs.readFileSync(FALTAS_DATA_FILE, 'utf-8');
@@ -178,7 +321,20 @@ app.get('/api/faltas', (_req, res) => {
   } catch (err) {
     console.error('Erro ao ler faltas-data.json:', err);
   }
+
+  // Segunda tentativa buscando ao vivo
+  const live = await fetchLiveFaltasFromGoogle();
+  if (live.length > 0) {
+    return res.json({ success: true, count: live.length, faltas: live });
+  }
+
   res.json({ success: false, faltas: [] });
+});
+
+app.post('/api/sync-faltas', async (req, res) => {
+  const targetUrl = req.body?.url;
+  const live = await fetchLiveFaltasFromGoogle(targetUrl);
+  res.json({ success: true, count: live.length, faltas: live });
 });
 
 app.post('/api/faltas', (req, res) => {
@@ -199,7 +355,12 @@ app.post('/api/faltas', (req, res) => {
 });
 
 // 5. Persistência de Verificação de Faltas
-app.get('/api/verificacao', (_req, res) => {
+app.get('/api/verificacao', async (req, res) => {
+  const forceSync = req.query.sync === 'true' || !fs.existsSync(VERIFICACAO_DATA_FILE);
+  if (forceSync) {
+    await fetchLiveFaltasFromGoogle();
+  }
+
   try {
     if (fs.existsSync(VERIFICACAO_DATA_FILE)) {
       const raw = fs.readFileSync(VERIFICACAO_DATA_FILE, 'utf-8');
@@ -219,6 +380,12 @@ app.get('/api/verificacao', (_req, res) => {
   } catch (err) {
     console.error('Erro ao ler verificacao-data.json:', err);
   }
+
+  const live = await fetchLiveFaltasFromGoogle();
+  if (live.length > 0) {
+    return res.json({ success: true, count: live.length, verificacao: live });
+  }
+
   res.json({ success: false, verificacao: [] });
 });
 
@@ -319,6 +486,10 @@ async function startServer() {
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`EMG-PM/3 Server rodando na porta ${PORT}`);
+    // Sincroniza imediatamente com a planilha oficial do 2º Turno no boot
+    fetchLiveFaltasFromGoogle().catch((err) => {
+      console.warn('Boot sync warning:', err);
+    });
   });
 
   server.on('error', (err: any) => {

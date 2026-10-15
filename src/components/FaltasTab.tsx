@@ -96,26 +96,25 @@ export function countPoliciaisInText(text: string | undefined | null): number {
   if (!text) return 0;
   if (isSemAlteracaoFalta(text)) return 0;
 
-  const lines = text
-    .split(/[\r\n]+/)
-    .map((s) => s.trim())
-    .filter((s) => Boolean(s) && !isStructuralHeader(s) && !isSemAlteracaoFalta(s));
-
-  const validMilitaryLines = lines.filter(
-    (l) =>
-      /(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|ST\b)/i.test(l) ||
-      /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{5,6}/i.test(l)
-  );
-
-  if (validMilitaryLines.length > 0) {
-    return validMilitaryLines.length;
-  }
-
+  // Divide por quebra de linha ou ponto e vírgula para identificar cada militar faltoso
   const items = text
     .split(/[;\r\n]+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 2 && !isStructuralHeader(s) && !isSemAlteracaoFalta(s));
-  return items.length > 0 ? items.length : 1;
+    .filter((s) => Boolean(s) && !isStructuralHeader(s) && !isSemAlteracaoFalta(s));
+
+  if (items.length === 0) return 0;
+
+  const validMilitaryItems = items.filter(
+    (l) =>
+      /(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|ST\b)/i.test(l) ||
+      /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{4,7}/i.test(l)
+  );
+
+  if (validMilitaryItems.length > 0) {
+    return validMilitaryItems.length;
+  }
+
+  return items.length;
 }
 
 export const FaltasTab: React.FC<FaltasTabProps> = ({

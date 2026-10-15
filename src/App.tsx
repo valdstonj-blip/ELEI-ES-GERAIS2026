@@ -22,7 +22,7 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LocaisTab } from './components/LocaisTab';
 import { OcorrenciasTab } from './components/OcorrenciasTab';
-import { FaltasTab } from './components/FaltasTab';
+import { FaltasTab, countPoliciaisInText } from './components/FaltasTab';
 import { VerificacaoTab } from './components/VerificacaoTab';
 import { SheetConnectionModal } from './components/SheetConnectionModal';
 import { runFaltasAudit } from './services/faltasAuditService';
@@ -300,7 +300,10 @@ export default function App() {
       {/* Contagens do 2º Turno Oficial */}
       {(() => {
         const countOcorrencias2oTurno = ocorrencias.length;
-        const countFaltas2oTurno = faltas.length;
+        const totalFaltosos = (faltas.length > 0 ? faltas : faltasVerificadas).reduce(
+          (acc, f) => acc + countPoliciaisInText(f.faltasPoe || f.motivo),
+          0
+        );
 
         return (
           <Header
@@ -316,10 +319,10 @@ export default function App() {
             counts={{
               locais: locais.length,
               ocorrencias: countOcorrencias2oTurno,
-              faltas: countFaltas2oTurno,
-              verificacao: faltasVerificadas.length || countFaltas2oTurno,
+              faltas: totalFaltosos,
+              verificacao: totalFaltosos,
               sensiveis: locais.filter((l) => isSim(l.areaSensivel)).length,
-              inconsistencias: faltasVerificadas.length || countFaltas2oTurno,
+              inconsistencias: totalFaltosos,
             }}
           />
         );
