@@ -23,7 +23,7 @@ import { countPoliciaisInText } from './FaltasTab';
 import { exportVerificacaoPdf } from '../services/pdfVerificacaoService';
 import { CsvHelper } from '../lib/csvHelper';
 import { RAW_VERIFICACAO_CSV } from '../data/rawVerificacaoCsv';
-import { matchesCarimboDate } from '../services/pdfService';
+import { matchesCarimboDate, computeFaltasPorDia } from '../services/pdfService';
 
 interface VerificacaoTabProps {
   faltas?: FaltaEfetivo[];
@@ -219,6 +219,11 @@ export const VerificacaoTab: React.FC<VerificacaoTabProps> = ({
       totalGeralEnvios: totalEnvios,
     };
   }, [filteredFaltas]);
+
+  // Estatísticas comparativas de faltas por dia (Carimbo de Data e Hora)
+  const statsDias = useMemo(() => {
+    return computeFaltasPorDia(internalFaltas);
+  }, [internalFaltas]);
 
   // =========================================================================
   // 2. ESTATÍSTICAS POR OPM (QUANTIDADE DE FALTAS POR OPM)
@@ -529,13 +534,13 @@ export const VerificacaoTab: React.FC<VerificacaoTabProps> = ({
         )}
 
         {/* CARDS DE RESUMO EXECUTIVO */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3.5 pt-3 border-t border-slate-100">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-3.5 pt-3 border-t border-slate-100">
           <div className="bg-rose-50/70 border border-rose-200 rounded-lg p-2.5">
             <span className="text-[10px] uppercase font-bold text-rose-700 block">Total de Faltas</span>
             <div className="text-2xl font-black text-rose-900 mt-0.5 font-mono">
               {totalGeralFaltas}
             </div>
-            <span className="text-[10px] text-rose-700 font-medium">policiais faltosos no estado</span>
+            <span className="text-[10px] text-rose-700 font-medium">policiais faltosos</span>
           </div>
 
           <div className="bg-blue-50/70 border border-blue-200 rounded-lg p-2.5">
@@ -552,6 +557,20 @@ export const VerificacaoTab: React.FC<VerificacaoTabProps> = ({
               {opmStatsList.length}
             </div>
             <span className="text-[10px] text-indigo-700 font-medium">batalhões e unidades</span>
+          </div>
+
+          <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-2.5">
+            <span className="text-[10px] uppercase font-bold text-amber-800 block">Dia Mais Faltoso</span>
+            <div className="text-sm font-black text-amber-950 mt-1 truncate">
+              {statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
+                ? `${statsDias.diaMaisFaltoso.codigoDia === '24OUT' ? '24/10 (Sáb)' : '25/10 (Dom)'} — ${statsDias.diaMaisFaltoso.totalFaltas} faltas`
+                : 'Distribuição igual'}
+            </div>
+            <span className="text-[10px] text-amber-700 font-medium">
+              {statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
+                ? `${statsDias.diaMaisFaltoso.percentual} do total`
+                : 'base equilibrada'}
+            </span>
           </div>
 
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5">

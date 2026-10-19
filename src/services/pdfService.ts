@@ -1394,6 +1394,120 @@ export interface FaltasPdfOptions {
   search?: string;
 }
 
+export interface DiaFaltasResumoItem {
+  codigoDia: '24OUT' | '25OUT' | string;
+  diaLabel: string;
+  dataCarimboFormatada: string;
+  totalEnvios: number;
+  totalFaltas: number;
+  percentual: string;
+  isMaior: boolean;
+  carimbosUnicos: string[];
+}
+
+export function computeFaltasPorDia(faltas: FaltaEfetivo[]): {
+  dias: DiaFaltasResumoItem[];
+  diaMaisFaltoso: DiaFaltasResumoItem | null;
+  totalFaltasGeral: number;
+  totalEnviosGeral: number;
+} {
+  let totalFaltasGeral = 0;
+  let totalEnviosGeral = faltas.length;
+
+  const dia24: DiaFaltasResumoItem = {
+    codigoDia: '24OUT',
+    diaLabel: 'Dia 24/10/2026 — Sábado (2º Turno Oficial)',
+    dataCarimboFormatada: '24/10/2026',
+    totalEnvios: 0,
+    totalFaltas: 0,
+    percentual: '0.0%',
+    isMaior: false,
+    carimbosUnicos: [],
+  };
+
+  const dia25: DiaFaltasResumoItem = {
+    codigoDia: '25OUT',
+    diaLabel: 'Dia 25/10/2026 — Domingo (2º Turno Oficial)',
+    dataCarimboFormatada: '25/10/2026',
+    totalEnvios: 0,
+    totalFaltas: 0,
+    percentual: '0.0%',
+    isMaior: false,
+    carimbosUnicos: [],
+  };
+
+  const carimbos24Set = new Set<string>();
+  const carimbos25Set = new Set<string>();
+
+  faltas.forEach((f) => {
+    const qtd = countPoliciaisInText(f.faltasPoe || f.motivo);
+    totalFaltasGeral += qtd;
+
+    const c = (f.carimbo || '').trim().toLowerCase();
+    const s = (f.servicoDia || '').trim().toLowerCase();
+    const d = (f.data || '').trim().toLowerCase();
+
+    const is25 =
+      c.includes('25/10') ||
+      c.includes('25out') ||
+      c.includes('25-10') ||
+      s.includes('25out') ||
+      s.includes('25/10') ||
+      s.includes('domingo') ||
+      d.includes('25/10');
+
+    if (is25) {
+      dia25.totalEnvios += 1;
+      dia25.totalFaltas += qtd;
+      if (f.carimbo) carimbos25Set.add(f.carimbo.split(' ')[0]);
+    } else {
+      dia24.totalEnvios += 1;
+      dia24.totalFaltas += qtd;
+      if (f.carimbo) carimbos24Set.add(f.carimbo.split(' ')[0]);
+    }
+  });
+
+  dia24.carimbosUnicos = Array.from(carimbos24Set);
+  dia25.carimbosUnicos = Array.from(carimbos25Set);
+
+  if (dia24.carimbosUnicos.length > 0) {
+    if (dia24.carimbosUnicos.includes('24/10/2026') && dia24.carimbosUnicos.length === 1) {
+      dia24.dataCarimboFormatada = '24/10/2026';
+    } else {
+      dia24.dataCarimboFormatada = `24/10/2026 (${dia24.carimbosUnicos.join(', ')})`;
+    }
+  }
+
+  if (dia25.carimbosUnicos.length > 0) {
+    if (dia25.carimbosUnicos.includes('25/10/2026') && dia25.carimbosUnicos.length === 1) {
+      dia25.dataCarimboFormatada = '25/10/2026';
+    } else {
+      dia25.dataCarimboFormatada = `25/10/2026 (${dia25.carimbosUnicos.join(', ')})`;
+    }
+  }
+
+  if (totalFaltasGeral > 0) {
+    dia24.percentual = ((dia24.totalFaltas / totalFaltasGeral) * 100).toFixed(1) + '%';
+    dia25.percentual = ((dia25.totalFaltas / totalFaltasGeral) * 100).toFixed(1) + '%';
+  }
+
+  if (dia24.totalFaltas > dia25.totalFaltas) {
+    dia24.isMaior = true;
+  } else if (dia25.totalFaltas > dia24.totalFaltas) {
+    dia25.isMaior = true;
+  }
+
+  const dias = [dia24, dia25];
+  const diaMaisFaltoso =
+    dia24.totalFaltas > dia25.totalFaltas
+      ? dia24
+      : dia25.totalFaltas > dia24.totalFaltas
+      ? dia25
+      : null;
+
+  return { dias, diaMaisFaltoso, totalFaltasGeral, totalEnviosGeral };
+}
+
 /**
  * Exporta o Relatório de Faltas de Efetivo com suporte a filtragem por CPA, OPM e Carimbo de Data/Hora (03OUT ou 04OUT)
  * Inclui totalização por linha enviada e identificação clara dos policiais faltosos
@@ -1505,22 +1619,44 @@ export function exportFaltasPdf(
     totalPoliciaisFaltosos += countPoliciaisInText(f.faltasPoe || f.motivo);
   });
 
+  // Cálculo de faltas por dia levando em consideração carimbo de data e hora do formulário
+  const statsDias = computeFaltasPorDia(filtered);
+
   // Card de Totalização Geral no topo (Y=20 a 30.5) - Sem sobrepor cabeçalho nem tabela
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
   doc.roundedRect(10, 20.5, 277, 10, 1.5, 1.5, 'FD');
 
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.3);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 41, 59);
   doc.text(`TOTALIZAÇÃO DO EFETIVO [${filtroSubtitle}]:`, 14, 27);
 
   doc.setFont('helvetica', 'normal');
-  doc.text(`Envios: ${total}`, 130, 27);
+  doc.text(`Envios: ${total}`, 105, 27);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(185, 28, 28);
-  doc.text(`Total Policiais Faltosos: ${totalPoliciaisFaltosos}`, 175, 27);
+  doc.text(`Total Policiais Faltosos: ${totalPoliciaisFaltosos}`, 135, 27);
+
+  // Informação do dia com maior número de faltas no card executivo
+  if (statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    const diaDesc =
+      statsDias.diaMaisFaltoso.codigoDia === '24OUT'
+        ? 'Dia 24/10 (Sáb)'
+        : 'Dia 25/10 (Dom)';
+    doc.text(
+      `Maior Incidência: ${diaDesc} (${statsDias.diaMaisFaltoso.totalFaltas} faltas)`,
+      205,
+      27
+    );
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Distribuição homogênea', 205, 27);
+  }
 
   // =========================================================================
   // 1. TABELA RESUMO POR COMANDO (CPA)
@@ -1765,10 +1901,143 @@ export function exportFaltasPdf(
   });
 
   // =========================================================================
-  // 3. DETALHAMENTO ANALÍTICO COMPLETO DOS ENVIOS (LINHA A LINHA DA PLANILHA)
+  // 3. QUADRO RESUMO DE FALTAS POR DIA DE EVENTO (CARIMBO DE DATA E HORA DO FORMULÁRIO)
   // =========================================================================
   const opmTableFinalY = (doc as any).lastAutoTable?.finalY || 120;
-  let detailStartY = opmTableFinalY + 7;
+  let diaStartY = opmTableFinalY + 7;
+
+  if (diaStartY + 38 > pageHeight) {
+    doc.addPage();
+    diaStartY = 24;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+  doc.text(
+    '3. QUADRO RESUMO DE FALTAS POR DIA DE EVENTO (CARIMBO DE DATA E HORA DO FORMULÁRIO)',
+    10,
+    diaStartY
+  );
+
+  const diaSummaryRows = statsDias.dias.map((d) => {
+    let situacao = 'Operação Regular';
+    if (d.isMaior && d.totalFaltas > 0) {
+      situacao = '★ MAIOR INCIDÊNCIA DE FALTAS';
+    } else if (d.totalFaltas === 0) {
+      situacao = 'Sem faltas registradas';
+    }
+
+    return [
+      d.diaLabel,
+      d.dataCarimboFormatada,
+      `${d.totalEnvios} envio(s)`,
+      `${d.totalFaltas} falta(s)`,
+      d.percentual,
+      situacao,
+    ];
+  });
+
+  const diaSummaryFoot = [
+    [
+      'TOTAL DO EVENTO (2º TURNO)',
+      'Todos os carimbos de envio',
+      `${statsDias.totalEnviosGeral} envio(s)`,
+      `${statsDias.totalFaltasGeral} falta(s)`,
+      '100.0%',
+      statsDias.diaMaisFaltoso
+        ? `Maior dia: ${statsDias.diaMaisFaltoso.codigoDia === '24OUT' ? '24/10 (Sábado)' : '25/10 (Domingo)'}`
+        : 'Distribuição igualitária',
+    ],
+  ];
+
+  autoTable(doc, {
+    startY: diaStartY + 2,
+    head: [
+      [
+        'Dia de Evento (2º Turno Oficial)',
+        'Data / Carimbo de Envio do Formulário',
+        'Total de Envios',
+        'Policiais Faltosos',
+        '% do Total',
+        'Classificação / Incidência Operacional',
+      ],
+    ],
+    body: diaSummaryRows,
+    foot: diaSummaryFoot,
+    margin: { top: 22, bottom: 12, left: 10, right: 10 },
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 6.8,
+      halign: 'center',
+    },
+    footStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 6.8,
+      halign: 'center',
+    },
+    styles: {
+      fontSize: 6.2,
+      cellPadding: 1.2,
+      overflow: 'linebreak',
+      textColor: [30, 41, 59],
+      valign: 'middle',
+    },
+    columnStyles: {
+      0: { halign: 'left', fontStyle: 'bold', cellWidth: 70 },
+      1: { halign: 'center', cellWidth: 62 },
+      2: { halign: 'center', fontStyle: 'bold', cellWidth: 32 },
+      3: { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28], cellWidth: 35 },
+      4: { halign: 'center', fontStyle: 'bold', cellWidth: 26 },
+      5: { halign: 'center', fontStyle: 'bold', cellWidth: 52 },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 5) {
+        const text = String(data.cell.raw || '');
+        if (text.includes('MAIOR INCIDÊNCIA')) {
+          data.cell.styles.textColor = [185, 28, 28];
+          data.cell.styles.fillColor = [254, 242, 242];
+        }
+      }
+    },
+  });
+
+  // Caixa de Conclusão / Destaque Comparativo por Dia de Evento
+  const diaTableFinalY = (doc as any).lastAutoTable?.finalY || 140;
+  let calloutStartY = diaTableFinalY + 3;
+
+  if (calloutStartY + 14 > pageHeight) {
+    doc.addPage();
+    calloutStartY = 24;
+  }
+
+  doc.setFillColor(254, 242, 242); // rose-50
+  doc.setDrawColor(248, 113, 113); // rose-400
+  doc.roundedRect(10, calloutStartY, 277, 8.5, 1.2, 1.2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.8);
+  doc.setTextColor(153, 27, 27); // rose-800
+
+  let comparativeMsg = '▶ COMPARATIVO DE FALTAS POR DIA: ';
+  if (statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0) {
+    comparativeMsg += `O dia com maior registro de faltas foi o ${statsDias.diaMaisFaltoso.diaLabel.toUpperCase()} com ${statsDias.diaMaisFaltoso.totalFaltas} policiais faltosos (${statsDias.diaMaisFaltoso.percentual} do total de faltas do evento).`;
+  } else if (statsDias.totalFaltasGeral === 0) {
+    comparativeMsg += 'Nenhuma falta de efetivo registrada em nenhum dos dias do pleito eleitoral.';
+  } else {
+    comparativeMsg += 'Distribuição equilibrada de faltas entre os dias 24/10 e 25/10 de Outubro.';
+  }
+  doc.text(comparativeMsg, 14, calloutStartY + 5.5);
+
+  // =========================================================================
+  // 4. DETALHAMENTO ANALÍTICO COMPLETO DOS ENVIOS (LINHA A LINHA DA PLANILHA)
+  // =========================================================================
+  let detailStartY = calloutStartY + 12;
 
   if (detailStartY + 30 > pageHeight) {
     doc.addPage();
@@ -1778,7 +2047,11 @@ export function exportFaltasPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(30, 41, 59);
-  doc.text('3. DETALHAMENTO ANALÍTICO DOS ENVIOS E IDENTIFICAÇÃO DOS POLICIAIS FALTOSOS', 10, detailStartY);
+  doc.text(
+    '4. DETALHAMENTO ANALÍTICO DOS ENVIOS E IDENTIFICAÇÃO DOS POLICIAIS FALTOSOS',
+    10,
+    detailStartY
+  );
 
   // Linhas da tabela - Contendo a quantidade de faltas de cada linha enviada
   const rows = filtered.length > 0 ? filtered.map((f) => {
