@@ -15,7 +15,8 @@ export const DEFAULT_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit';
 
 // URLs oficiais do 2º Turno Oficial
-export const DEFAULT_OCORRENCIAS_URL = '';
+export const DEFAULT_OCORRENCIAS_URL =
+  'https://docs.google.com/spreadsheets/d/1mjwbWLqU3rpnMtyHyKJzqj1u0cKrb3Hdx-Rx2BBNkGc/edit?gid=1689465461#gid=1689465461';
 export const DEFAULT_FALTAS_URL =
   'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
 export const DEFAULT_VERIFICACAO_URL =
@@ -124,6 +125,8 @@ export const CsvHelper = {
         } else if (localOcorr && localOcorr.startsWith('http') && !localOcorr.includes('1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE')) {
           pushPayload.ocorrenciasUrl = localOcorr;
           needPush = true;
+        } else {
+          this.setOcorrenciasSheetUrl(DEFAULT_OCORRENCIAS_URL, true);
         }
 
         // Sincroniza Faltas (rejeita link do 1º turno)
@@ -342,8 +345,10 @@ export const CsvHelper = {
       console.warn('Falha ao ler cache de ocorrencias:', e);
     }
 
-    // Inicializa com 1 dado de teste oficial do 2º Turno
-    this.saveOcorrencias(INITIAL_OCORRENCIAS);
+    // Inicializa localmente com os dados oficiais do 2º Turno sem sobrescrever o servidor
+    try {
+      localStorage.setItem(STORAGE_KEYS.OCORRENCIAS, JSON.stringify(INITIAL_OCORRENCIAS));
+    } catch {}
     return INITIAL_OCORRENCIAS;
   },
 
@@ -565,14 +570,14 @@ export const CsvHelper = {
       localStorage.removeItem(STORAGE_KEYS.FALTAS_URL);
       localStorage.removeItem(STORAGE_KEYS.VERIFICACAO_URL);
 
-      SHEET_URLS.PLANILHA_2_OCORRENCIAS = '';
-      SHEET_URLS.PLANILHA_3_FALTAS = '';
-      SHEET_URLS.PLANILHA_4_VERIFICACAO = '';
+      SHEET_URLS.PLANILHA_2_OCORRENCIAS = DEFAULT_OCORRENCIAS_URL;
+      SHEET_URLS.PLANILHA_3_FALTAS = DEFAULT_FALTAS_URL;
+      SHEET_URLS.PLANILHA_4_VERIFICACAO = DEFAULT_VERIFICACAO_URL;
 
       // 2. Chama endpoint do servidor para limpar arquivos no disco
       await fetch('/api/clear-cache', { method: 'POST' }).catch(() => {});
 
-      // 3. Salva novo estado inicial limpo de 1 registro de teste
+      // 3. Salva novo estado inicial com os dados oficiais do 2º Turno
       this.saveOcorrencias(INITIAL_OCORRENCIAS);
       this.saveFaltas(INITIAL_FALTAS);
       this.saveVerificacao(INITIAL_FALTAS);

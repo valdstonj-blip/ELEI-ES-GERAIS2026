@@ -7,6 +7,8 @@ import {
 } from './types';
 import {
   DEFAULT_SHEET_URL,
+  DEFAULT_OCORRENCIAS_URL,
+  DEFAULT_FALTAS_URL,
   CsvHelper,
   fetchCsvWithTimeout,
 } from './lib/csvHelper';
@@ -103,7 +105,7 @@ export default function App() {
 
       // 2. Ocorrências (Planilha de Respostas do Formulário)
       const ocorrenciasTask = (async () => {
-        const ocorrenciasUrl = CsvHelper.getOcorrenciasSheetUrl();
+        const ocorrenciasUrl = CsvHelper.getOcorrenciasSheetUrl() || DEFAULT_OCORRENCIAS_URL;
         if (ocorrenciasUrl && ocorrenciasUrl.startsWith('http')) {
           try {
             const csvText = await fetchCsvWithTimeout(ocorrenciasUrl);

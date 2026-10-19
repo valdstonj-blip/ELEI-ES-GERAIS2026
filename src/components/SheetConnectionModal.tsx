@@ -90,9 +90,9 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
     }
     setIsClearing(true);
     await CsvHelper.clearAllCachesAndResetTo2Turno();
-    setOcorrenciasUrl('');
-    setFaltasUrl('');
-    setVerificacaoUrl('');
+    setOcorrenciasUrl(CsvHelper.getOcorrenciasSheetUrl());
+    setFaltasUrl(CsvHelper.getFaltasSheetUrl());
+    setVerificacaoUrl(CsvHelper.getVerificacaoSheetUrl());
     setTestResult({});
     onOcorrenciasUpdated(INITIAL_OCORRENCIAS);
     onFaltasUpdated(INITIAL_FALTAS);

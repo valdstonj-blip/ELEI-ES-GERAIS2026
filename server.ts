@@ -19,14 +19,17 @@ const OCORRENCIAS_DATA_FILE = path.resolve(__dirname, 'ocorrencias-data.json');
 const FALTAS_DATA_FILE = path.resolve(__dirname, 'faltas-data.json');
 const VERIFICACAO_DATA_FILE = path.resolve(__dirname, 'verificacao-data.json');
 
-// Link fixo e oficial da Planilha de Faltas do 2º Turno (para todo o evento)
+// Links fixos e oficiais das Planilhas do 2º Turno (para todo o evento)
 const OFFICIAL_FALTAS_URL =
   'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
+
+export const OFFICIAL_OCORRENCIAS_URL =
+  'https://docs.google.com/spreadsheets/d/1mjwbWLqU3rpnMtyHyKJzqj1u0cKrb3Hdx-Rx2BBNkGc/edit?gid=1689465461#gid=1689465461';
 
 // Configuração Padrão do 2º Turno Oficial (24 e 25 de Outubro)
 const DEFAULT_CONFIG = {
   locaisUrl: 'https://docs.google.com/spreadsheets/d/1j6fAH3lpWLf29B17vYmzz3O6DRtmsyCbA3eiFxCGjkw/edit?gid=580074849#gid=580074849',
-  ocorrenciasUrl: 'https://docs.google.com/spreadsheets/d/1mjwbWLqU3rpnMtyHyKJzqj1u0cKrb3Hdx-Rx2BBNkGc/edit?gid=1689465461#gid=1689465461',
+  ocorrenciasUrl: OFFICIAL_OCORRENCIAS_URL,
   faltasUrl: OFFICIAL_FALTAS_URL,
   verificacaoUrl: OFFICIAL_FALTAS_URL,
   updatedAt: new Date().toISOString(),
@@ -38,7 +41,7 @@ function readConfig() {
       const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (parsed.ocorrenciasUrl && parsed.ocorrenciasUrl.includes('1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE')) {
-        parsed.ocorrenciasUrl = '';
+        parsed.ocorrenciasUrl = OFFICIAL_OCORRENCIAS_URL;
       }
       if (parsed.faltasUrl && parsed.faltasUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')) {
         parsed.faltasUrl = OFFICIAL_FALTAS_URL;
@@ -46,6 +49,8 @@ function readConfig() {
       return {
         ...DEFAULT_CONFIG,
         ...parsed,
+        locaisUrl: parsed.locaisUrl || DEFAULT_CONFIG.locaisUrl,
+        ocorrenciasUrl: parsed.ocorrenciasUrl || OFFICIAL_OCORRENCIAS_URL,
         faltasUrl: parsed.faltasUrl || OFFICIAL_FALTAS_URL,
         verificacaoUrl: parsed.verificacaoUrl || OFFICIAL_FALTAS_URL,
       };
@@ -197,6 +202,150 @@ async function fetchLiveFaltasFromGoogle(targetUrl?: string): Promise<any[]> {
   return [];
 }
 
+async function fetchLiveOcorrenciasFromGoogle(targetUrl?: string): Promise<any[]> {
+  const urlToUse = targetUrl || readConfig().ocorrenciasUrl || OFFICIAL_OCORRENCIAS_URL;
+  if (!urlToUse || !urlToUse.includes('docs.google.com/spreadsheets/d/')) {
+    return [];
+  }
+  const match = urlToUse.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) return [];
+  const sheetId = match[1];
+  const gidMatch = urlToUse.match(/[?&#]gid=([0-9]+)/);
+  const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : '';
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
+
+  try {
+    const resp = await fetch(exportUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+    if (!resp.ok) return [];
+    const text = await resp.text();
+    if (!text || text.length < 50 || text.includes('accounts.google.com')) return [];
+
+    const rows = parseCsvRows(text);
+    if (rows.length < 2) return [];
+
+    const headers = rows[0].map((h) => h.trim().toUpperCase());
+    const findIdx = (keywords: string[]) =>
+      headers.findIndex((h) => keywords.some((k) => h.includes(k)));
+
+    const idxCarimbo = findIdx(['CARIMBO', 'DATA/HORA']);
+    const idxEmail = findIdx(['EMAIL', 'E-MAIL']);
+    const idxPosto = findIdx(['POSTO', 'GRADUAÇÃO']);
+    const idxRg = findIdx(['RG', 'MATRÍCULA']);
+    const idxNomeGuerra = findIdx(['NOME DE GUERRA', 'NOME GUERRA', 'GUERRA']);
+    const idxCpa = findIdx(['COMANDO INTERMEDIÁRIO', 'COMANDO INTERMEDIARIO', 'CPA']);
+    const idxOpm = findIdx(['OPM', 'UOP', 'BATALHÃO']);
+    const idxServicoDia = findIdx(['SERVIÇO DO DIA', 'SERVICO DO DIA', 'TURNO']);
+    const idxLocal = findIdx(['LOCAL DA OCORRÊNCIA', 'LOCAL DA OCORRENCIA', 'LOCAL']);
+    const idxHora = findIdx(['HORA DA OCORRÊNCIA', 'HORA DA OCORRENCIA', 'HORA']);
+    const idxCrimesCand = findIdx(['CONTRA CANDIDATOS', 'CANDIDATO']);
+    const idxCrimesLocais = findIdx(['LOCAIS DE VOTAÇÃO', 'LOCAIS DE VOTACAO', 'APURAÇÃO']);
+    const idxCrimesEleit = findIdx(['CRIMES ELEITORAIS']);
+    const idxIncidSeg = findIdx(['INCIDENTES DE SEGURANÇA', 'SEGURANÇA PÚBLICA', 'DEFESA SOCIAL']);
+    const idxPrisoes = findIdx(['PRISÕES/APREENSÕES', 'PRISOES', 'APREENSÕES']);
+    const idxBopm = findIdx(['BOPM']);
+    const idxRo = findIdx(['R.O', 'RO']);
+    const idxDinamica = findIdx(['DINÂMICA', 'DINAMICA', 'HISTÓRICO', 'HISTORICO']);
+
+    const isSemAlt = (v: string) => {
+      if (!v) return true;
+      const s = v.trim().toLowerCase();
+      return (
+        s === 'não houve' ||
+        s === 'nao houve' ||
+        s === 'sem alteração' ||
+        s === 'sem alteracao' ||
+        s === 'nenhuma' ||
+        s === 'nenhum' ||
+        s === '-' ||
+        s === ''
+      );
+    };
+
+    const parsed: any[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const carimbo = (idxCarimbo >= 0 ? row[idxCarimbo] : row[0]) || '';
+      const email = (idxEmail >= 0 ? row[idxEmail] : row[1]) || '';
+      const posto = (idxPosto >= 0 ? row[idxPosto] : row[2]) || '';
+      const rg = (idxRg >= 0 ? row[idxRg] : row[3]) || '';
+      const nomeGuerra = (idxNomeGuerra >= 0 ? row[idxNomeGuerra] : row[4]) || '';
+      const cpaRaw = (idxCpa >= 0 ? row[idxCpa] : row[5]) || '';
+      const opm = (idxOpm >= 0 ? row[idxOpm] : row[6]) || '';
+      const servicoDia = (idxServicoDia >= 0 ? row[idxServicoDia] : row[7]) || '';
+      const local = (idxLocal >= 0 ? row[idxLocal] : row[8]) || '';
+      const hora = (idxHora >= 0 ? row[idxHora] : row[9]) || '';
+      const crimesCandidatos = (idxCrimesCand >= 0 ? row[idxCrimesCand] : row[10]) || 'Não houve';
+      const crimesLocaisVotacao = (idxCrimesLocais >= 0 ? row[idxCrimesLocais] : row[11]) || 'Não houve';
+      const crimesEleitorais = (idxCrimesEleit >= 0 ? row[idxCrimesEleit] : row[12]) || 'Não houve';
+      const incidentesSeguranca = (idxIncidSeg >= 0 ? row[idxIncidSeg] : row[13]) || 'Não houve';
+      const prisoesApreensoes = (idxPrisoes >= 0 ? row[idxPrisoes] : row[14]) || 'Não houve';
+      const bopm = (idxBopm >= 0 ? row[idxBopm] : row[15]) || '';
+      const ro = (idxRo >= 0 ? row[idxRo] : row[16]) || '';
+      const dinamica = (idxDinamica >= 0 ? row[idxDinamica] : row[17]) || '';
+
+      if (!nomeGuerra && !rg && !local && !dinamica) continue;
+
+      const cpa = normalizeCpaName(cpaRaw);
+
+      const crimesRegistrados: string[] = [];
+      if (!isSemAlt(crimesCandidatos)) crimesRegistrados.push(crimesCandidatos);
+      if (!isSemAlt(crimesLocaisVotacao)) crimesRegistrados.push(crimesLocaisVotacao);
+      if (!isSemAlt(crimesEleitorais)) crimesRegistrados.push(crimesEleitorais);
+      if (!isSemAlt(incidentesSeguranca)) crimesRegistrados.push(incidentesSeguranca);
+      if (!isSemAlt(prisoesApreensoes)) crimesRegistrados.push(prisoesApreensoes);
+
+      parsed.push({
+        id: `oc-${i}`,
+        carimbo,
+        email,
+        posto,
+        rg,
+        nomeGuerra,
+        comandoIntermediario: cpa,
+        opm,
+        servicoDia,
+        local,
+        hora,
+        crimesCandidatos,
+        crimesLocaisVotacao,
+        crimesEleitorais,
+        incidentesSeguranca,
+        prisoesApreensoes,
+        crimesRegistrados,
+        seHouverOcorrenciaDizerQual: crimesRegistrados[0] || 'Não houve',
+        bopm,
+        ro,
+        dinamica,
+        cpa,
+        uop: opm,
+        bairro: local,
+        localidade: local,
+        categoria: crimesRegistrados[0] || 'Outras ocorrências',
+        tipo: crimesRegistrados[0] || 'Registro Operacional',
+        dataHoraFato: `${carimbo.split(' ')[0] || ''} ${hora}`.trim(),
+        historico: dinamica,
+        providencias: `BOPM: ${bopm} | RO: ${ro}`.trim(),
+        envolvidos: 'Em apuração',
+        status: 'CONCLUÍDA',
+      });
+    }
+
+    if (parsed.length > 0) {
+      fs.writeFileSync(OCORRENCIAS_DATA_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+      console.log(`[EMG-PM/3] Sincronização direta de Ocorrências com Google Sheets concluída com sucesso: ${parsed.length} ocorrências salvas.`);
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('[EMG-PM/3] Aviso ao sincronizar Ocorrências do Google Sheets remotamente:', err);
+  }
+  return [];
+}
+
 // 1. Configuração ativa de planilhas (Links do Sistema)
 app.get('/api/sheet-config', (_req, res) => {
   const cfg = readConfig();
@@ -219,6 +368,12 @@ app.post('/api/sheet-config', (req, res) => {
   const ok = writeConfig(updated);
   if (ok) {
     console.log('[EMG-PM/3] Links de planilhas atualizados e fixados no servidor:', updated);
+    if (updated.ocorrenciasUrl) {
+      fetchLiveOcorrenciasFromGoogle(updated.ocorrenciasUrl).catch(() => {});
+    }
+    if (updated.faltasUrl) {
+      fetchLiveFaltasFromGoogle(updated.faltasUrl).catch(() => {});
+    }
     res.json({ success: true, config: updated });
   } else {
     res.status(500).json({ success: false, message: 'Falha ao salvar configuração no servidor.' });
@@ -257,12 +412,17 @@ app.post('/api/locais', (req, res) => {
 });
 
 // 3. Persistência de Ocorrências (2º Turno Oficial)
-app.get('/api/ocorrencias', (_req, res) => {
+app.get('/api/ocorrencias', async (req, res) => {
+  const forceSync = req.query.sync === 'true' || !fs.existsSync(OCORRENCIAS_DATA_FILE);
+  if (forceSync) {
+    await fetchLiveOcorrenciasFromGoogle();
+  }
+
   try {
     if (fs.existsSync(OCORRENCIAS_DATA_FILE)) {
       const raw = fs.readFileSync(OCORRENCIAS_DATA_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         // Filtra para garantir que não haja sobras antigas do 1º turno
         const clean = parsed.filter((o: any) => {
           const s = `${o?.carimbo || ''} ${o?.servicoDia || ''} ${o?.dinamica || ''}`.toLowerCase();
@@ -271,13 +431,28 @@ app.get('/api/ocorrencias', (_req, res) => {
             !(s.includes('24/10') || s.includes('25/10') || s.includes('24out') || s.includes('25out'))
           );
         });
-        return res.json({ success: true, count: clean.length, ocorrencias: clean });
+        if (clean.length > 0) {
+          return res.json({ success: true, count: clean.length, ocorrencias: clean });
+        }
       }
     }
   } catch (err) {
     console.error('Erro ao ler ocorrencias-data.json:', err);
   }
+
+  // Segunda tentativa buscando ao vivo
+  const live = await fetchLiveOcorrenciasFromGoogle();
+  if (live.length > 0) {
+    return res.json({ success: true, count: live.length, ocorrencias: live });
+  }
+
   res.json({ success: false, ocorrencias: [] });
+});
+
+app.post('/api/sync-ocorrencias', async (req, res) => {
+  const targetUrl = req.body?.url;
+  const live = await fetchLiveOcorrenciasFromGoogle(targetUrl);
+  res.json({ success: true, count: live.length, ocorrencias: live });
 });
 
 app.post('/api/ocorrencias', (req, res) => {
@@ -414,21 +589,26 @@ app.post('/api/clear-cache', (_req, res) => {
     if (fs.existsSync(FALTAS_DATA_FILE)) fs.unlinkSync(FALTAS_DATA_FILE);
     if (fs.existsSync(VERIFICACAO_DATA_FILE)) fs.unlinkSync(VERIFICACAO_DATA_FILE);
 
-    // Limpa links antigos do 1º turno na configuração
-    const cfg = readConfig();
+    // Mantém configuração com os links oficiais permanentes do 2º Turno
     const cleanCfg = {
-      ...cfg,
-      ocorrenciasUrl: '',
-      faltasUrl: '',
-      verificacaoUrl: '',
+      locaisUrl: DEFAULT_CONFIG.locaisUrl,
+      ocorrenciasUrl: OFFICIAL_OCORRENCIAS_URL,
+      faltasUrl: OFFICIAL_FALTAS_URL,
+      verificacaoUrl: OFFICIAL_FALTAS_URL,
       updatedAt: new Date().toISOString(),
     };
     writeConfig(cleanCfg);
 
-    console.log('[EMG-PM/3] Caches antigos do 1º turno purgados do servidor com sucesso.');
+    // Imediatamente recarrega os dados oficiais das planilhas Google
+    Promise.allSettled([
+      fetchLiveFaltasFromGoogle(),
+      fetchLiveOcorrenciasFromGoogle(),
+    ]).catch(() => {});
+
+    console.log('[EMG-PM/3] Caches antigos purgados e bases oficiais do 2º Turno recarregadas.');
     res.json({
       success: true,
-      message: 'Caches purgados do servidor com sucesso. Pronto para inserção das novas planilhas do 2º Turno!',
+      message: 'Caches purgados e bases oficiais do 2º Turno recarregadas com sucesso!',
       config: cleanCfg,
     });
   } catch (err: any) {
@@ -486,8 +666,11 @@ async function startServer() {
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`EMG-PM/3 Server rodando na porta ${PORT}`);
-    // Sincroniza imediatamente com a planilha oficial do 2º Turno no boot
-    fetchLiveFaltasFromGoogle().catch((err) => {
+    // Sincroniza imediatamente com as planilhas oficiais do 2º Turno no boot
+    Promise.allSettled([
+      fetchLiveFaltasFromGoogle(),
+      fetchLiveOcorrenciasFromGoogle(),
+    ]).catch((err) => {
       console.warn('Boot sync warning:', err);
     });
   });
