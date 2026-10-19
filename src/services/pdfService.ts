@@ -1395,14 +1395,12 @@ export interface FaltasPdfOptions {
 }
 
 export interface DiaFaltasResumoItem {
-  codigoDia: '24OUT' | '25OUT' | string;
+  codigoDia: string;
   diaLabel: string;
-  dataCarimboFormatada: string;
   totalEnvios: number;
   totalFaltas: number;
   percentual: string;
   isMaior: boolean;
-  carimbosUnicos: string[];
 }
 
 export function computeFaltasPorDia(faltas: FaltaEfetivo[]): {
@@ -1416,28 +1414,23 @@ export function computeFaltasPorDia(faltas: FaltaEfetivo[]): {
 
   const dia24: DiaFaltasResumoItem = {
     codigoDia: '24OUT',
-    diaLabel: 'Dia 24/10/2026 — Sábado (2º Turno Oficial)',
-    dataCarimboFormatada: '24/10/2026',
+    diaLabel: 'Dia 24/10/2026 (Sábado)',
     totalEnvios: 0,
     totalFaltas: 0,
     percentual: '0.0%',
     isMaior: false,
-    carimbosUnicos: [],
   };
 
   const dia25: DiaFaltasResumoItem = {
     codigoDia: '25OUT',
-    diaLabel: 'Dia 25/10/2026 — Domingo (2º Turno Oficial)',
-    dataCarimboFormatada: '25/10/2026',
+    diaLabel: 'Dia 25/10/2026 (Domingo)',
     totalEnvios: 0,
     totalFaltas: 0,
     percentual: '0.0%',
     isMaior: false,
-    carimbosUnicos: [],
   };
 
-  const carimbos24Set = new Set<string>();
-  const carimbos25Set = new Set<string>();
+  const outrosDiasMap: Record<string, DiaFaltasResumoItem> = {};
 
   faltas.forEach((f) => {
     const qtd = countPoliciaisInText(f.faltasPoe || f.motivo);
@@ -1446,64 +1439,67 @@ export function computeFaltasPorDia(faltas: FaltaEfetivo[]): {
     const c = (f.carimbo || '').trim().toLowerCase();
     const s = (f.servicoDia || '').trim().toLowerCase();
     const d = (f.data || '').trim().toLowerCase();
+    const full = `${c} ${s} ${d}`;
 
     const is25 =
-      c.includes('25/10') ||
-      c.includes('25out') ||
-      c.includes('25-10') ||
-      s.includes('25out') ||
-      s.includes('25/10') ||
-      s.includes('domingo') ||
-      d.includes('25/10');
+      full.includes('25/10') ||
+      full.includes('25out') ||
+      full.includes('25-10') ||
+      full.includes('domingo');
+
+    const is24 =
+      full.includes('24/10') ||
+      full.includes('24out') ||
+      full.includes('24-10') ||
+      full.includes('sábado') ||
+      full.includes('sabado');
 
     if (is25) {
       dia25.totalEnvios += 1;
       dia25.totalFaltas += qtd;
-      if (f.carimbo) carimbos25Set.add(f.carimbo.split(' ')[0]);
-    } else {
+    } else if (is24) {
       dia24.totalEnvios += 1;
       dia24.totalFaltas += qtd;
-      if (f.carimbo) carimbos24Set.add(f.carimbo.split(' ')[0]);
+    } else {
+      // Captura erros de preenchimento ou outras datas de carimbo
+      const m = c.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
+      const chaveOutra = m ? `Data ${m[1]} (Outros registros)` : 'Data não identificada';
+      if (!outrosDiasMap[chaveOutra]) {
+        outrosDiasMap[chaveOutra] = {
+          codigoDia: 'OUTRA',
+          diaLabel: chaveOutra,
+          totalEnvios: 0,
+          totalFaltas: 0,
+          percentual: '0.0%',
+          isMaior: false,
+        };
+      }
+      outrosDiasMap[chaveOutra].totalEnvios += 1;
+      outrosDiasMap[chaveOutra].totalFaltas += qtd;
     }
   });
 
-  dia24.carimbosUnicos = Array.from(carimbos24Set);
-  dia25.carimbosUnicos = Array.from(carimbos25Set);
+  const dias = [dia24, dia25, ...Object.values(outrosDiasMap)];
 
-  if (dia24.carimbosUnicos.length > 0) {
-    if (dia24.carimbosUnicos.includes('24/10/2026') && dia24.carimbosUnicos.length === 1) {
-      dia24.dataCarimboFormatada = '24/10/2026';
-    } else {
-      dia24.dataCarimboFormatada = `24/10/2026 (${dia24.carimbosUnicos.join(', ')})`;
+  let maiorQtd = 0;
+  dias.forEach((d) => {
+    if (d.totalFaltas > maiorQtd) {
+      maiorQtd = d.totalFaltas;
     }
-  }
-
-  if (dia25.carimbosUnicos.length > 0) {
-    if (dia25.carimbosUnicos.includes('25/10/2026') && dia25.carimbosUnicos.length === 1) {
-      dia25.dataCarimboFormatada = '25/10/2026';
-    } else {
-      dia25.dataCarimboFormatada = `25/10/2026 (${dia25.carimbosUnicos.join(', ')})`;
+    if (totalFaltasGeral > 0) {
+      d.percentual = ((d.totalFaltas / totalFaltasGeral) * 100).toFixed(1) + '%';
     }
-  }
+  });
 
-  if (totalFaltasGeral > 0) {
-    dia24.percentual = ((dia24.totalFaltas / totalFaltasGeral) * 100).toFixed(1) + '%';
-    dia25.percentual = ((dia25.totalFaltas / totalFaltasGeral) * 100).toFixed(1) + '%';
+  let diaMaisFaltoso: DiaFaltasResumoItem | null = null;
+  if (maiorQtd > 0) {
+    dias.forEach((d) => {
+      if (d.totalFaltas === maiorQtd) {
+        d.isMaior = true;
+        if (!diaMaisFaltoso) diaMaisFaltoso = d;
+      }
+    });
   }
-
-  if (dia24.totalFaltas > dia25.totalFaltas) {
-    dia24.isMaior = true;
-  } else if (dia25.totalFaltas > dia24.totalFaltas) {
-    dia25.isMaior = true;
-  }
-
-  const dias = [dia24, dia25];
-  const diaMaisFaltoso =
-    dia24.totalFaltas > dia25.totalFaltas
-      ? dia24
-      : dia25.totalFaltas > dia24.totalFaltas
-      ? dia25
-      : null;
 
   return { dias, diaMaisFaltoso, totalFaltasGeral, totalEnviosGeral };
 }
@@ -1901,12 +1897,12 @@ export function exportFaltasPdf(
   });
 
   // =========================================================================
-  // 3. QUADRO RESUMO DE FALTAS POR DIA DE EVENTO (CARIMBO DE DATA E HORA DO FORMULÁRIO)
+  // 3. QUADRO RESUMO DE FALTAS POR DATA DO EVENTO
   // =========================================================================
   const opmTableFinalY = (doc as any).lastAutoTable?.finalY || 120;
   let diaStartY = opmTableFinalY + 7;
 
-  if (diaStartY + 38 > pageHeight) {
+  if (diaStartY + 30 > pageHeight) {
     doc.addPage();
     diaStartY = 24;
   }
@@ -1914,40 +1910,25 @@ export function exportFaltasPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(30, 41, 59);
-  doc.text(
-    '3. QUADRO RESUMO DE FALTAS POR DIA DE EVENTO (CARIMBO DE DATA E HORA DO FORMULÁRIO)',
-    10,
-    diaStartY
-  );
+  doc.text('3. QUADRO RESUMO DE FALTAS POR DATA DO EVENTO', 10, diaStartY);
 
-  const diaSummaryRows = statsDias.dias.map((d) => {
-    let situacao = 'Operação Regular';
-    if (d.isMaior && d.totalFaltas > 0) {
-      situacao = '★ MAIOR INCIDÊNCIA DE FALTAS';
-    } else if (d.totalFaltas === 0) {
-      situacao = 'Sem faltas registradas';
-    }
+  const diaSummaryRows = statsDias.dias.map((d) => [
+    d.diaLabel,
+    `${d.totalEnvios} envio(s)`,
+    d.totalFaltas > 0 ? `${d.totalFaltas} falta(s)` : '0',
+    d.isMaior && d.totalFaltas > 0 ? 'MAIOR NUMERO DE FALTAS' : '-',
+  ]);
 
-    return [
-      d.diaLabel,
-      d.dataCarimboFormatada,
-      `${d.totalEnvios} envio(s)`,
-      `${d.totalFaltas} falta(s)`,
-      d.percentual,
-      situacao,
-    ];
-  });
+  const maiorDataTexto = statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
+    ? `Data com mais faltas: ${statsDias.diaMaisFaltoso.diaLabel}`
+    : 'Distribuicao homogenea';
 
   const diaSummaryFoot = [
     [
-      'TOTAL DO EVENTO (2º TURNO)',
-      'Todos os carimbos de envio',
+      'TOTAL GERAL',
       `${statsDias.totalEnviosGeral} envio(s)`,
       `${statsDias.totalFaltasGeral} falta(s)`,
-      '100.0%',
-      statsDias.diaMaisFaltoso
-        ? `Maior dia: ${statsDias.diaMaisFaltoso.codigoDia === '24OUT' ? '24/10 (Sábado)' : '25/10 (Domingo)'}`
-        : 'Distribuição igualitária',
+      maiorDataTexto,
     ],
   ];
 
@@ -1955,12 +1936,10 @@ export function exportFaltasPdf(
     startY: diaStartY + 2,
     head: [
       [
-        'Dia de Evento (2º Turno Oficial)',
-        'Data / Carimbo de Envio do Formulário',
-        'Total de Envios',
-        'Policiais Faltosos',
-        '% do Total',
-        'Classificação / Incidência Operacional',
+        'DATA / DIA DO EVENTO',
+        'TOTAL DE ENVIOS',
+        'QUANTIDADE DE FALTAS',
+        'INDICADOR',
       ],
     ],
     body: diaSummaryRows,
@@ -1968,14 +1947,14 @@ export function exportFaltasPdf(
     margin: { top: 22, bottom: 12, left: 10, right: 10 },
     theme: 'grid',
     headStyles: {
-      fillColor: [15, 23, 42],
+      fillColor: [30, 41, 59],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 6.8,
       halign: 'center',
     },
     footStyles: {
-      fillColor: [30, 41, 59],
+      fillColor: [15, 23, 42],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 6.8,
@@ -1989,55 +1968,26 @@ export function exportFaltasPdf(
       valign: 'middle',
     },
     columnStyles: {
-      0: { halign: 'left', fontStyle: 'bold', cellWidth: 70 },
-      1: { halign: 'center', cellWidth: 62 },
-      2: { halign: 'center', fontStyle: 'bold', cellWidth: 32 },
-      3: { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28], cellWidth: 35 },
-      4: { halign: 'center', fontStyle: 'bold', cellWidth: 26 },
-      5: { halign: 'center', fontStyle: 'bold', cellWidth: 52 },
+      0: { halign: 'left', fontStyle: 'bold', cellWidth: 120 },
+      1: { halign: 'center', cellWidth: 45 },
+      2: { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28], cellWidth: 50 },
+      3: { halign: 'center', fontStyle: 'bold', cellWidth: 62 },
     },
     didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index === 5) {
+      if (data.section === 'body' && data.column.index === 3) {
         const text = String(data.cell.raw || '');
-        if (text.includes('MAIOR INCIDÊNCIA')) {
+        if (text.includes('MAIOR NUMERO')) {
           data.cell.styles.textColor = [185, 28, 28];
-          data.cell.styles.fillColor = [254, 242, 242];
         }
       }
     },
   });
 
-  // Caixa de Conclusão / Destaque Comparativo por Dia de Evento
-  const diaTableFinalY = (doc as any).lastAutoTable?.finalY || 140;
-  let calloutStartY = diaTableFinalY + 3;
-
-  if (calloutStartY + 14 > pageHeight) {
-    doc.addPage();
-    calloutStartY = 24;
-  }
-
-  doc.setFillColor(254, 242, 242); // rose-50
-  doc.setDrawColor(248, 113, 113); // rose-400
-  doc.roundedRect(10, calloutStartY, 277, 8.5, 1.2, 1.2, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.8);
-  doc.setTextColor(153, 27, 27); // rose-800
-
-  let comparativeMsg = '▶ COMPARATIVO DE FALTAS POR DIA: ';
-  if (statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0) {
-    comparativeMsg += `O dia com maior registro de faltas foi o ${statsDias.diaMaisFaltoso.diaLabel.toUpperCase()} com ${statsDias.diaMaisFaltoso.totalFaltas} policiais faltosos (${statsDias.diaMaisFaltoso.percentual} do total de faltas do evento).`;
-  } else if (statsDias.totalFaltasGeral === 0) {
-    comparativeMsg += 'Nenhuma falta de efetivo registrada em nenhum dos dias do pleito eleitoral.';
-  } else {
-    comparativeMsg += 'Distribuição equilibrada de faltas entre os dias 24/10 e 25/10 de Outubro.';
-  }
-  doc.text(comparativeMsg, 14, calloutStartY + 5.5);
-
   // =========================================================================
   // 4. DETALHAMENTO ANALÍTICO COMPLETO DOS ENVIOS (LINHA A LINHA DA PLANILHA)
   // =========================================================================
-  let detailStartY = calloutStartY + 12;
+  const diaTableFinalY = (doc as any).lastAutoTable?.finalY || 140;
+  let detailStartY = diaTableFinalY + 7;
 
   if (detailStartY + 30 > pageHeight) {
     doc.addPage();

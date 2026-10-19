@@ -135,7 +135,6 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalFalta, setModalFalta] = useState<FaltaEfetivo | null>(null);
-  const [showDayTable, setShowDayTable] = useState(true);
 
   // Consolidação detalhada de Faltas por Dia de Evento (Carimbo de Data e Hora do Formulário)
   const statsDias = useMemo(() => {
@@ -484,323 +483,109 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
         </div>
       </div>
 
-      {/* 1. QUADRO RESUMO DE FALTAS POR DIA DE EVENTO (CARIMBO DE DATA E HORA DO FORMULÁRIO) */}
-      <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+      {/* QUADRO RESUMO DE FALTAS POR DATA DO EVENTO (SIMPLES E FUNCIONAL) */}
+      <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
-              <Calendar className="w-4 h-4 text-blue-700" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Quadro Resumo de Faltas por Dia de Evento
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 font-mono">
-                  Carimbo de Data/Hora
-                </span>
-                {selectedDay !== 'TODOS' && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                    Filtro ativo: {selectedDay}
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Totalização comparativa e incidência de faltas no 2º Turno Oficial (24 e 25 de Outubro de 2026)
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-            <button
-              onClick={() => setShowDayTable((prev) => !prev)}
-              className="px-2.5 py-1 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer transition-colors"
-            >
-              {showDayTable ? 'Ocultar Tabela' : 'Ver Tabela Completa'}
-            </button>
-            <button
-              onClick={() =>
-                exportFaltasPdf(faltas, {
-                  dia: 'TODOS',
-                  cpa: selectedCpa,
-                  opm: selectedOpm,
-                })
-              }
-              title="Exportar PDF com Quadro por Dia, CPA, OPM e Detalhamento Analítico"
-              className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-            >
-              <FileDown className="w-3.5 h-3.5" />
-              <span>Exportar PDF Todos os Dias</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Banner de Destaque Executivo do Dia com Mais Faltas */}
-        <div className={`p-2.5 rounded-lg border flex items-center justify-between gap-3 text-xs ${
-          statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
-            ? 'bg-rose-50/70 border-rose-200 text-rose-950'
-            : 'bg-slate-50 border-slate-200 text-slate-700'
-        }`}>
-          <div className="flex items-center gap-2">
-            <AlertCircle className={`w-4 h-4 shrink-0 ${
-              statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
-                ? 'text-rose-600'
-                : 'text-slate-400'
-            }`} />
-            <div>
-              <span className="font-bold">
-                {statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
-                  ? 'DIA COM MAIOR INCIDÊNCIA DE FALTAS:'
-                  : 'DISTRIBUIÇÃO DE FALTAS:'}
-              </span>{' '}
-              <span className="font-extrabold">
-                {statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
-                  ? `${statsDias.diaMaisFaltoso.diaLabel.toUpperCase()} — ${statsDias.diaMaisFaltoso.totalFaltas} falta(s) (${statsDias.diaMaisFaltoso.percentual} do total de faltas)`
-                  : statsDias.totalFaltasGeral === 0
-                  ? 'Nenhuma falta de efetivo registrada no evento eleitoral até o momento.'
-                  : 'Distribuição homogênea entre os dias do pleito.'}
+            <Calendar className="w-4 h-4 text-blue-700" />
+            <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
+              Resumo de Faltas por Data do Evento
+            </span>
+            {statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0 && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                Mais faltas: {statsDias.diaMaisFaltoso.diaLabel} ({statsDias.diaMaisFaltoso.totalFaltas})
               </span>
-            </div>
+            )}
           </div>
-
-          {selectedDay !== 'TODOS' && (
-            <button
-              onClick={() => {
-                setSelectedDay('TODOS');
-                setCurrentPage(1);
-              }}
-              className="text-xs font-bold text-blue-700 hover:text-blue-900 underline shrink-0 cursor-pointer"
-            >
-              Ver Todos os Dias
-            </button>
-          )}
+          <button
+            onClick={() =>
+              exportFaltasPdf(faltas, {
+                dia: 'TODOS',
+                cpa: selectedCpa,
+                opm: selectedOpm,
+              })
+            }
+            title="Exportar PDF de Faltas com Quadro por Data, CPA e OPM"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer"
+          >
+            <FileDown className="w-3.5 h-3.5" />
+            <span>Exportar Relatório Geral</span>
+          </button>
         </div>
 
-        {/* Cards Comparativos dos Dias (24OUT e 25OUT) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {statsDias.dias.map((d) => {
-            const isSelected = selectedDay === d.codigoDia;
-            const hasFaltas = d.totalFaltas > 0;
-
-            return (
-              <div
-                key={d.codigoDia}
-                className={`p-3 rounded-xl border transition-all flex flex-col justify-between ${
-                  isSelected
-                    ? 'border-blue-600 bg-blue-50/40 ring-2 ring-blue-500/30 shadow-xs'
-                    : d.isMaior && hasFaltas
-                    ? 'border-rose-300 bg-rose-50/20 shadow-2xs'
-                    : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-black text-slate-900">
-                        {d.diaLabel}
-                      </span>
-                      {d.isMaior && hasFaltas && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white uppercase tracking-wider animate-pulse">
-                          Mais Faltoso
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-slate-500 block mt-0.5">
-                      Data Carimbo do Formulário: <strong className="text-slate-700 font-mono">{d.dataCarimboFormatada}</strong>
-                    </span>
-                  </div>
-
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    isSelected
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {d.codigoDia}
-                  </span>
-                </div>
-
-                <div className="mt-3 grid grid-cols-3 gap-2 py-2 border-y border-slate-200/80 text-center">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                      Envios
-                    </span>
-                    <span className="text-lg font-black text-slate-800 font-mono">
-                      {d.totalEnvios}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                      Faltas
-                    </span>
-                    <span className={`text-lg font-black font-mono ${
-                      hasFaltas ? 'text-rose-700 font-black' : 'text-slate-600'
-                    }`}>
-                      {d.totalFaltas}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                      % do Evento
-                    </span>
-                    <span className="text-lg font-black text-indigo-700 font-mono">
-                      {d.percentual}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-2.5 flex items-center justify-between gap-2">
-                  <span className={`text-[11px] font-bold ${
-                    d.isMaior && hasFaltas
-                      ? 'text-rose-700'
-                      : hasFaltas
-                      ? 'text-slate-700'
-                      : 'text-slate-400'
-                  }`}>
-                    {hasFaltas
-                      ? d.isMaior
-                        ? '★ Maior incidência de faltas'
-                        : 'Faltas registradas'
-                      : 'Sem faltas registradas'}
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => {
-                        setSelectedDay(isSelected ? 'TODOS' : (d.codigoDia as any));
-                        setCurrentPage(1);
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-blue-600 text-white shadow-2xs'
-                          : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-                      }`}
-                    >
-                      {isSelected ? 'Ver Todos' : `Filtrar ${d.codigoDia}`}
-                    </button>
-                    <button
-                      onClick={() =>
-                        exportFaltasPdf(faltas, {
-                          dia: d.codigoDia,
-                          cpa: selectedCpa,
-                          opm: selectedOpm,
-                        })
-                      }
-                      title={`Exportar relatório em PDF específico do ${d.codigoDia}`}
-                      className="p-1 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
-                    >
-                      <FileDown className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Tabela Detalhada do Resumo por Dia (Idêntica ao Quadro 3 do PDF) */}
-        {showDayTable && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 mt-2">
-            <table className="w-full text-xs text-left border-collapse">
-              <thead className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="py-2 px-3">Dia de Evento (2º Turno Oficial)</th>
-                  <th className="py-2 px-3 text-center">Data / Carimbo de Envio</th>
-                  <th className="py-2 px-3 text-center">Formulários (Envios)</th>
-                  <th className="py-2 px-3 text-center">Policiais Faltosos</th>
-                  <th className="py-2 px-3 text-center">% do Total</th>
-                  <th className="py-2 px-3 text-center">Incidência Operacional</th>
-                  <th className="py-2 px-3 text-center">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {statsDias.dias.map((d) => (
-                  <tr
-                    key={d.codigoDia}
-                    className={`hover:bg-blue-50/40 transition-colors ${
-                      d.isMaior && d.totalFaltas > 0 ? 'bg-rose-50/20' : ''
-                    }`}
-                  >
-                    <td className="py-2 px-3 font-bold text-slate-900">
-                      <div className="flex items-center gap-1.5">
-                        <span>{d.diaLabel}</span>
-                        {d.isMaior && d.totalFaltas > 0 && (
-                          <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse shrink-0" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-600">
-                      {d.dataCarimboFormatada}
-                    </td>
-                    <td className="py-2 px-3 text-center font-bold font-mono text-slate-800">
-                      {d.totalEnvios} envio(s)
-                    </td>
-                    <td className="py-2 px-3 text-center font-extrabold font-mono text-rose-700">
-                      {d.totalFaltas} falta(s)
-                    </td>
-                    <td className="py-2 px-3 text-center font-bold font-mono text-indigo-700">
-                      {d.percentual}
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                          d.isMaior && d.totalFaltas > 0
-                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                            : d.totalFaltas === 0
-                            ? 'bg-slate-100 text-slate-500 border border-slate-200'
-                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        }`}
-                      >
-                        {d.isMaior && d.totalFaltas > 0
-                          ? '★ MAIOR INCIDÊNCIA'
-                          : d.totalFaltas === 0
-                          ? 'Sem faltas'
-                          : 'Operação Regular'}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-center whitespace-nowrap">
-                      <button
-                        onClick={() => {
-                          setSelectedDay(d.codigoDia as any);
-                          setCurrentPage(1);
-                        }}
-                        className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[10px] font-bold transition-colors cursor-pointer border border-slate-200"
-                      >
-                        Filtrar Dia
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-slate-900 text-white font-bold text-[11px]">
-                <tr>
-                  <td className="py-2 px-3">TOTAL GERAL DO EVENTO (2º TURNO)</td>
-                  <td className="py-2 px-3 text-center font-mono text-[10px]">Todos os carimbos</td>
-                  <td className="py-2 px-3 text-center font-mono">{statsDias.totalEnviosGeral} envio(s)</td>
-                  <td className="py-2 px-3 text-center font-mono text-rose-300 font-extrabold">
-                    {statsDias.totalFaltasGeral} falta(s)
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-xs text-left border-collapse">
+            <thead className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-wider">
+              <tr>
+                <th className="py-2 px-3">Data / Dia do Evento</th>
+                <th className="py-2 px-3 text-center">Envios</th>
+                <th className="py-2 px-3 text-center">Quantidade de Faltas</th>
+                <th className="py-2 px-3 text-center">Indicador</th>
+                <th className="py-2 px-3 text-center">Ação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {statsDias.dias.map((d) => (
+                <tr key={d.codigoDia} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-2 px-3 font-bold text-slate-900">
+                    {d.diaLabel}
                   </td>
-                  <td className="py-2 px-3 text-center font-mono">100.0%</td>
-                  <td className="py-2 px-3 text-center text-[10px] text-amber-300">
-                    {statsDias.diaMaisFaltoso
-                      ? `Maior dia: ${statsDias.diaMaisFaltoso.codigoDia === '24OUT' ? '24/10 (Sáb)' : '25/10 (Dom)'}`
-                      : 'Distribuição homogênea'}
+                  <td className="py-2 px-3 text-center font-mono text-slate-600">
+                    {d.totalEnvios} envio(s)
+                  </td>
+                  <td className="py-2 px-3 text-center font-black font-mono text-rose-700">
+                    {d.totalFaltas} falta(s)
+                  </td>
+                  <td className="py-2 px-3 text-center font-semibold text-[11px]">
+                    {d.isMaior && d.totalFaltas > 0 ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-rose-700 border border-slate-200">
+                        Maior número de faltas
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
                   </td>
                   <td className="py-2 px-3 text-center">
                     <button
                       onClick={() => {
-                        setSelectedDay('TODOS');
+                        setSelectedDay(d.codigoDia as any);
                         setCurrentPage(1);
                       }}
-                      className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold transition-colors cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[10px] font-bold transition-colors cursor-pointer border border-slate-200"
                     >
-                      Ver Todos
+                      Filtrar
                     </button>
                   </td>
                 </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+            <tfoot className="bg-slate-900 text-white font-bold text-[11px]">
+              <tr>
+                <td className="py-2 px-3">TOTAL GERAL DO EVENTO</td>
+                <td className="py-2 px-3 text-center font-mono">{statsDias.totalEnviosGeral} envio(s)</td>
+                <td className="py-2 px-3 text-center font-mono text-rose-300 font-extrabold">
+                  {statsDias.totalFaltasGeral} falta(s)
+                </td>
+                <td className="py-2 px-3 text-center text-[10px] text-slate-300">
+                  {statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
+                    ? `Data com mais faltas: ${statsDias.diaMaisFaltoso.diaLabel}`
+                    : 'Distribuição homogênea'}
+                </td>
+                <td className="py-2 px-3 text-center">
+                  <button
+                    onClick={() => {
+                      setSelectedDay('TODOS');
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold transition-colors cursor-pointer"
+                  >
+                    Ver Todos
+                  </button>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       {/* QUADRO RÁPIDO DE COMANDOS INTERMEDIÁRIOS (CPA) */}
