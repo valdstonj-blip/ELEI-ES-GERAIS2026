@@ -1618,24 +1618,54 @@ export function exportFaltasPdf(
   // Cálculo de faltas por dia levando em consideração carimbo de data e hora do formulário
   const statsDias = computeFaltasPorDia(filtered);
 
-  // Card de Totalização Geral no topo (Y=20 a 30.5) - Sem sobrepor cabeçalho nem tabela
+  // Card de Totalização Geral no topo (Y=20.5 a 30.5) - Sem sobrepor cabeçalho nem tabela
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.3);
   doc.roundedRect(10, 20.5, 277, 10, 1.5, 1.5, 'FD');
 
-  doc.setFontSize(7.3);
+  const bannerY = 26.8;
+  const cardFontSize = 7.3;
+  doc.setFontSize(cardFontSize);
+
+  let currentX = 14;
+
+  // 1. Título e Escopo dos Filtros
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 41, 59);
-  doc.text(`TOTALIZAÇÃO DO EFETIVO [${filtroSubtitle}]:`, 14, 27);
+  const titleText = `TOTALIZAÇÃO DO EFETIVO [${filtroSubtitle}]: `;
+  doc.text(titleText, currentX, bannerY);
+  currentX += doc.getTextWidth(titleText);
 
+  // 2. Quantidade de Envios (sem sobrepor o título)
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  const enviosText = `Envios: ${total}`;
+  doc.text(enviosText, currentX, bannerY);
+  currentX += doc.getTextWidth(enviosText);
+
+  // Separador 1
   doc.setFont('helvetica', 'normal');
-  doc.text(`Envios: ${total}`, 105, 27);
+  doc.setTextColor(148, 163, 184);
+  const sep1 = '   •   ';
+  doc.text(sep1, currentX, bannerY);
+  currentX += doc.getTextWidth(sep1);
 
+  // 3. Total de Policiais Faltosos
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(185, 28, 28);
-  doc.text(`Total Policiais Faltosos: ${totalPoliciaisFaltosos}`, 135, 27);
+  const faltososText = `Total Policiais Faltosos: ${totalPoliciaisFaltosos}`;
+  doc.text(faltososText, currentX, bannerY);
+  currentX += doc.getTextWidth(faltososText);
 
-  // Informação do dia com maior número de faltas no card executivo
+  // Separador 2
+  const sep2 = '   •   ';
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text(sep2, currentX, bannerY);
+  currentX += doc.getTextWidth(sep2);
+
+  // 4. Indicador de Maior Incidência / Distribuição
   if (statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0) {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
@@ -1645,13 +1675,13 @@ export function exportFaltasPdf(
         : 'Dia 25/10 (Dom)';
     doc.text(
       `Maior Incidência: ${diaDesc} (${statsDias.diaMaisFaltoso.totalFaltas} faltas)`,
-      205,
-      27
+      currentX,
+      bannerY
     );
   } else {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text('Distribuição homogênea', 205, 27);
+    doc.text('Distribuição homogênea', currentX, bannerY);
   }
 
   // =========================================================================
