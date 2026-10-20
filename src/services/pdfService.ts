@@ -134,7 +134,7 @@ export function exportLocaisPdf(
   if (filters?.statusFilter === 'SENSIVEIS') filtered = filtered.filter((l) => isSim(l.areaSensivel));
   if (filters?.statusFilter === 'DOMINGO') filtered = filtered.filter((l) => isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo));
   if (filters?.statusFilter === 'BLINDADO') filtered = filtered.filter((l) => isSim(l.blindado) || isSim(l.utilizacaoBlindado));
-  if (filters?.statusFilter === 'DUPLICIDADES') filtered = filtered.filter((l) => l.isDuplicado);
+  if (filters?.statusFilter === 'ALT_2TURNO') filtered = filtered.filter((l) => Boolean(l.hasAlteracoes2Turno));
   if (filters?.statusFilter === 'ENERGIA_CABOS') filtered = filtered.filter((l) => Boolean(l.hasAlteracaoEnergia));
 
   const isObsVal = (l: LocalVotacao) => {
@@ -165,6 +165,7 @@ export function exportLocaisPdf(
       const cpa = (l.cpa || '').toLowerCase();
       const zona = String(l.numZona || l.zonaEleitoral || '');
       const obs = (l.observacoes || l.observacao || '').toLowerCase();
+      const alt2 = (l.alteracoes2Turno || '').toLowerCase();
       return (
         nome.includes(q) ||
         endereco.includes(q) ||
@@ -172,13 +173,14 @@ export function exportLocaisPdf(
         uop.includes(q) ||
         cpa.includes(q) ||
         zona.includes(q) ||
-        obs.includes(q)
+        obs.includes(q) ||
+        alt2.includes(q)
       );
     });
   }
 
   const isAlteracoesFilter = filters?.statusFilter === 'ALTERACOES';
-  const isDuplicidadesFilter = filters?.statusFilter === 'DUPLICIDADES';
+  const isAlt2TurnoFilter = filters?.statusFilter === 'ALT_2TURNO';
   const total = filtered.length;
   const sensiveis = filtered.filter((l) => isSim(l.areaSensivel)).length;
   const blindado = filtered.filter((l) => isSim(l.blindado) || isSim(l.utilizacaoBlindado)).length;
@@ -458,7 +460,7 @@ export function exportLocaisPdf(
     const detailRows = filtered.map((l) => {
       const enderecoCompleto = [l.endereco, l.bairro].filter(Boolean).join(' - ') || '-';
 
-      if (isDuplicidadesFilter) {
+      if (isAlt2TurnoFilter) {
         return [
           l.numZona || l.zonaEleitoral || '-',
           l.linhaPlanilha ? `L.${l.linhaPlanilha}` : '-',
@@ -467,8 +469,8 @@ export function exportLocaisPdf(
           l.nomeLocal || l.local || '-',
           enderecoCompleto,
           isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
-          isSim(l.blindado) || isSim(l.utilizacaoBlindado) ? 'SIM' : 'NÃO',
-          l.duplicidadeMotivo || 'Conflito de duplicidade territorial detectado',
+          isSim(l.implantada) ? 'SIM' : 'NÃO',
+          l.alteracoes2Turno || 'Sem alterações registradas no 2º Turno',
         ];
       }
 
@@ -511,7 +513,7 @@ export function exportLocaisPdf(
     autoTable(doc, {
       startY: nextTableStartY,
       head: [
-        isDuplicidadesFilter
+        isAlt2TurnoFilter
           ? [
               'Zona',
               'Linha',
@@ -520,8 +522,8 @@ export function exportLocaisPdf(
               'Local de Votação',
               'Endereço / Bairro',
               'Sensível',
-              'Blindado',
-              'Identificação do Conflito / Duplicidade',
+              'Implant.',
+              'Alterações na Votação 2º Turno (Coluna O)',
             ]
           : isAlteracoesFilter
           ? [
@@ -567,7 +569,7 @@ export function exportLocaisPdf(
         halign: 'center',
         valign: 'middle',
       },
-      columnStyles: isDuplicidadesFilter
+      columnStyles: isAlt2TurnoFilter
         ? {
             0: { halign: 'center', fontStyle: 'bold', cellWidth: 13 },
             1: { halign: 'center', cellWidth: 15 },
@@ -577,7 +579,7 @@ export function exportLocaisPdf(
             5: { halign: 'left', cellWidth: 48 },
             6: { halign: 'center', cellWidth: 16 },
             7: { halign: 'center', cellWidth: 16 },
-            8: { halign: 'left', cellWidth: 76 },
+            8: { halign: 'left', fontStyle: 'bold', textColor: [29, 78, 216], cellWidth: 76 },
           }
         : isAlteracoesFilter
         ? {
@@ -611,9 +613,9 @@ export function exportLocaisPdf(
   let reportTitle = 'RELATÓRIO OPERACIONAL — LOCAIS DE VOTAÇÃO';
   let filePrefix = 'RELATORIO_LOCAIS_VOTACAO';
 
-  if (filters?.statusFilter === 'DUPLICIDADES') {
-    reportTitle = 'RELATÓRIO DE AUDITORIA — DUPLICIDADES E CONFLITOS TERRITORIAIS';
-    filePrefix = 'RELATORIO_DUPLICIDADES_LOCAIS';
+  if (filters?.statusFilter === 'ALT_2TURNO') {
+    reportTitle = 'RELATÓRIO DE ALTERAÇÕES NA VOTAÇÃO 2º TURNO';
+    filePrefix = 'RELATORIO_ALT_2TURNO_LOCAIS';
   } else if (filters?.statusFilter === 'ALTERACOES') {
     reportTitle = 'RELATÓRIO DE ALTERAÇÕES E OBSERVAÇÕES — LOCAIS DE VOTAÇÃO';
     filePrefix = 'RELATORIO_ALTERACOES_LOCAIS';

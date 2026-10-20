@@ -20,6 +20,8 @@ export interface LocalVotacao {
   observacoes: string;
   alteracaoEnergia?: string; // Registro da coluna de energia elétrica / furto ou roubo de cabos
   hasAlteracaoEnergia?: boolean;
+  alteracoes2Turno?: string; // Coluna O: 'ALTERAÇÕES NA VOTAÇÃO 2° TURNO'
+  hasAlteracoes2Turno?: boolean;
   implantada: boolean; // 'SIM' | 'NÃO' - Implantação realizada no dia
   desmobilizada: boolean; // 'SIM' | 'NÃO' - Desmobilização realizada ao término
   horaImplantacao?: string;

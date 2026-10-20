@@ -1,9 +1,8 @@
 import React from 'react';
 
-// Versão registrada do sistema — atualizada a cada ciclo de modificações técnicas
+// Versão registrada do sistema — alterada manualmente conforme solicitação
 export const SYSTEM_RELEASE = {
   version: '2.5',
-  updatedAt: '20/10/2026 às 13:28',
 };
 
 export const Footer: React.FC = () => {
@@ -57,7 +56,7 @@ export const Footer: React.FC = () => {
             </p>
           </div>
 
-          {/* Card do Desenvolvedor com Versão Registrada do Sistema */}
+          {/* Card do Desenvolvedor com Versão Registrada do Sistema (apenas versão, sem data/hora) */}
           <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex flex-col justify-between">
             <div>
               <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">
@@ -67,9 +66,8 @@ export const Footer: React.FC = () => {
                 Dev.Fiel.26
               </p>
             </div>
-            <div className="mt-1.5 pt-1.5 border-t border-slate-200/80 text-[9.5px] text-slate-500 font-mono leading-tight">
-              <span>Versão {SYSTEM_RELEASE.version}</span>
-              <span className="block text-[8.5px] text-slate-400 mt-0.5">Atualizado: {SYSTEM_RELEASE.updatedAt}</span>
+            <div className="mt-1.5 pt-1.5 border-t border-slate-200/80 text-[10px] text-slate-700 font-bold font-mono">
+              Versão {SYSTEM_RELEASE.version}
             </div>
           </div>
         </div>

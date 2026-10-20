@@ -136,6 +136,65 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
 
       const allRowKeys = Object.keys(row);
 
+      // Busca flexível pela coluna ALTERAÇÕES NA VOTAÇÃO 2° TURNO (Coluna O / índice 14 na planilha)
+      const keyAlt2Turno = allRowKeys.find((k) => {
+        const norm = k
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^A-Z0-9]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (norm.includes('ENERGIA') || norm.includes('CABO')) return false;
+
+        return (
+          (norm.includes('ALTERA') && (norm.includes('2') || norm.includes('TURNO') || norm.includes('SEGUNDO') || norm.includes('VOTACAO'))) ||
+          norm.includes('ALTERACOES NA VOTACAO 2 TURNO') ||
+          norm.includes('ALTERACOES VOTACAO 2 TURNO') ||
+          norm.includes('ALTERACAO VOTACAO 2 TURNO') ||
+          norm.includes('ALTERACAO 2 TURNO') ||
+          norm.includes('ALTERACOES 2 TURNO')
+        );
+      });
+
+      let alteracoes2TurnoRaw = keyAlt2Turno ? row[keyAlt2Turno] : (
+        row['ALTERAÇÕES NA VOTAÇÃO 2° TURNO'] ||
+        row['ALTERACOES NA VOTACAO 2° TURNO'] ||
+        row['ALTERAÇÕES NA VOTAÇÃO 2º TURNO'] ||
+        row['ALTERACOES NA VOTACAO 2º TURNO'] ||
+        row['ALTERAÇÕES NA VOTAÇÃO 2 TURNO'] ||
+        row['ALTERAÇÃO 2° TURNO'] ||
+        row['ALTERAÇÃO 2º TURNO'] ||
+        row['ALTERAÇÕES 2° TURNO'] ||
+        row['ALTERAÇÕES 2º TURNO'] ||
+        ''
+      );
+
+      // Fallback posicional: Coluna O da planilha Google Sheets corresponde ao índice 14 (15ª coluna)
+      if ((!alteracoes2TurnoRaw || String(alteracoes2TurnoRaw).trim() === '') && allRowKeys.length >= 15) {
+        const candHeader = allRowKeys[14];
+        if (candHeader && (candHeader.toUpperCase().includes('ALTERA') || candHeader.toUpperCase().includes('TURNO') || candHeader.toUpperCase().includes('VOTA'))) {
+          alteracoes2TurnoRaw = row[candHeader];
+        }
+      }
+
+      const alteracoes2Turno = String(alteracoes2TurnoRaw || '').trim();
+      const lowerAlt2 = alteracoes2Turno.toLowerCase();
+      const hasAlteracoes2Turno = (
+        alteracoes2Turno.length > 0 &&
+        alteracoes2Turno !== '-' &&
+        lowerAlt2 !== 'não' &&
+        lowerAlt2 !== 'nao' &&
+        lowerAlt2 !== 'sem alteração' &&
+        lowerAlt2 !== 'sem alteracao' &&
+        lowerAlt2 !== 'nada consta' &&
+        lowerAlt2 !== 'ok' &&
+        lowerAlt2 !== 'normal' &&
+        lowerAlt2 !== 'nenhuma' &&
+        lowerAlt2 !== 'nenhum'
+      );
+
       // Busca flexível pela coluna de ALTERAÇÃO DE ENERGIA ELÉTRICA / FURTO DE CABOS
       const keyEnergia = allRowKeys.find((k) => {
         const norm = k
@@ -164,11 +223,12 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
         ''
       );
 
-      // Fallback posicional se houver 21 colunas: coluna de índice 18 (19ª coluna)
-      if (!alteracaoEnergiaRaw && allRowKeys.length >= 21) {
-        const cand = row[allRowKeys[18]];
-        if (cand !== undefined && cand !== null && typeof cand === 'string' && cand.trim().length > 0) {
-          alteracaoEnergiaRaw = cand;
+      // Fallback posicional se houver 22 ou 21 colunas
+      if (!alteracaoEnergiaRaw) {
+        if (allRowKeys.length >= 22 && row[allRowKeys[19]] !== undefined) {
+          alteracaoEnergiaRaw = row[allRowKeys[19]];
+        } else if (allRowKeys.length >= 21 && row[allRowKeys[18]] !== undefined) {
+          alteracaoEnergiaRaw = row[allRowKeys[18]];
         }
       }
 
@@ -236,12 +296,11 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
       let implantadaRaw = keyImplantada ? row[keyImplantada] : (row['URNA IMPLANTADA'] || row['URNA IMPLANTADA NO LOCAL DE VOTAÇÃO'] || row['IMPLANTAÇÃO REALIZADA (SIM / NÃO)'] || row['IMPLANTADA']);
       let desmobilizadaRaw = keyDesmobilizada ? row[keyDesmobilizada] : (row['DESMOBILIZAÇÃO.'] || row['DESMOBILIZAÇÃO'] || row['DESMOBILIZAÇÃO DO LOCAL DE VOTAÇÃO'] || row['DESMOBILIZADA']);
 
-      // Fallbacks posicionais caso o cabeçalho não case:
-      // Formato 21 colunas: Coluna 20 = índice 19 (URNA IMPLANTADA), Coluna 21 = índice 20 (DESMOBILIZAÇÃO)
-      // Formato 20 colunas: Coluna 19 = índice 18, Coluna 20 = índice 19
-      // Formato 16 colunas: Coluna 15 = índice 14, Coluna 16 = índice 15
+      // Fallbacks posicionais:
       if (implantadaRaw === undefined || implantadaRaw === null || implantadaRaw === '') {
-        if (allRowKeys.length >= 21 && row[allRowKeys[19]] !== undefined) {
+        if (allRowKeys.length >= 22 && row[allRowKeys[20]] !== undefined) {
+          implantadaRaw = row[allRowKeys[20]];
+        } else if (allRowKeys.length >= 21 && row[allRowKeys[19]] !== undefined) {
           implantadaRaw = row[allRowKeys[19]];
         } else if (allRowKeys.length >= 19 && row[allRowKeys[18]] !== undefined) {
           implantadaRaw = row[allRowKeys[18]];
@@ -250,7 +309,9 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
         }
       }
       if (desmobilizadaRaw === undefined || desmobilizadaRaw === null || desmobilizadaRaw === '') {
-        if (allRowKeys.length >= 21 && row[allRowKeys[20]] !== undefined) {
+        if (allRowKeys.length >= 22 && row[allRowKeys[21]] !== undefined) {
+          desmobilizadaRaw = row[allRowKeys[21]];
+        } else if (allRowKeys.length >= 21 && row[allRowKeys[20]] !== undefined) {
           desmobilizadaRaw = row[allRowKeys[20]];
         } else if (allRowKeys.length >= 20 && row[allRowKeys[19]] !== undefined) {
           desmobilizadaRaw = row[allRowKeys[19]];
@@ -288,6 +349,8 @@ export function parseLocaisCsv(csvText: string): LocalVotacao[] {
         observacoes,
         alteracaoEnergia,
         hasAlteracaoEnergia,
+        alteracoes2Turno,
+        hasAlteracoes2Turno,
         implantada: isImplantada,
         desmobilizada: isDesmobilizada,
         linhaPlanilha: physicalLine,

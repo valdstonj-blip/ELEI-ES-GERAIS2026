@@ -2,7 +2,6 @@
   {
     "id": "falta-resp-1",
     "carimbo": "09/10/2026 13:52:00",
-    "email": "teste2turno@gmail.com",
     "servicoDia": "03OUT26 ( SÁBADO - 08:00 até ás 20:00 )",
     "posto": "TEN PM",
     "rg": "12345",
@@ -11,6 +10,7 @@
     "opm": "4º BPM",
     "faltasPoe": "3° SARGENTO JOSÉ - RG:99999 - 14° BPM;\n2° SARGENTO PEDRO - RG:99999 -11° BPM;\nCABO LUIS - RG:99999 -12° BPM.",
     "dispensasPoe": "sem alteração",
+    "email": "teste2turno@gmail.com",
     "data": "24/10/2026",
     "turno": "03OUT26 ( SÁBADO - 08:00 até ás 20:00 )",
     "postoGrad": "TEN PM",
@@ -27,7 +27,6 @@
   {
     "id": "falta-resp-2",
     "carimbo": "15/10/2026 08:24:33",
-    "email": "teste2@gmail.com",
     "servicoDia": "24OUT26 ( SÁBADO - 08:00 até ás 20:00 )",
     "posto": "TEN PM",
     "rg": "12345",
@@ -36,6 +35,7 @@
     "opm": "5° UPP/ 23° BPM",
     "faltasPoe": "2° SARGENTO JOSÉ - RG:99999 - 16° BPM;\n3° SARGENTO PEDRO - RG:99999 -15° BPM;\nCABO LUIS - RG:99999 -11° BPM.",
     "dispensasPoe": "sem alteração",
+    "email": "teste2@gmail.com",
     "data": "24/10/2026",
     "turno": "24OUT26 ( SÁBADO - 08:00 até ás 20:00 )",
     "postoGrad": "TEN PM",
