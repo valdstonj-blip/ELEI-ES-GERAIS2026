@@ -1,5 +1,11 @@
 import React from 'react';
 
+// Versão registrada do sistema — atualizada a cada ciclo de modificações técnicas
+export const SYSTEM_RELEASE = {
+  version: '2.5',
+  updatedAt: '20/10/2026 às 13:28',
+};
+
 export const Footer: React.FC = () => {
   return (
     <footer className="mt-auto border-t border-slate-200 bg-white text-slate-700 py-4 text-xs">
@@ -51,16 +57,24 @@ export const Footer: React.FC = () => {
             </p>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-            <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">
-              Desenvolvedor
-            </span>
-            <p className="font-extrabold text-blue-700 mt-0.5 text-xs font-mono">
-              Dev.Fiel.26
-            </p>
+          {/* Card do Desenvolvedor com Versão Registrada do Sistema */}
+          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div>
+              <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">
+                Desenvolvedor
+              </span>
+              <p className="font-extrabold text-blue-700 mt-0.5 text-xs font-mono tracking-tight">
+                Dev.Fiel.26
+              </p>
+            </div>
+            <div className="mt-1.5 pt-1.5 border-t border-slate-200/80 text-[9.5px] text-slate-500 font-mono leading-tight">
+              <span>Versão {SYSTEM_RELEASE.version}</span>
+              <span className="block text-[8.5px] text-slate-400 mt-0.5">Atualizado: {SYSTEM_RELEASE.updatedAt}</span>
+            </div>
           </div>
         </div>
 
+        {/* Rodapé discreto em linha única */}
         <div className="mt-2.5 text-center text-[10px] text-slate-400">
           Uso restrito à equipe técnica da Seção de Planejamento EMG-PM/3.
         </div>
@@ -68,3 +82,4 @@ export const Footer: React.FC = () => {
     </footer>
   );
 };
+

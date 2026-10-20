@@ -368,7 +368,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
       </div>
 
       {/* 1. INDICADORES CLAROS E MODERNOS (RESPONDENDO ÀS PERGUNTAS OPERACIONAIS) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
         {/* Card 1: Locais de Votação */}
         <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 pb-1.5 border-b border-slate-100">
@@ -463,22 +463,6 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
               <span className="text-[9px] text-slate-500 block">25OUT (DOM)</span>
               <span className="text-sm font-black text-emerald-800">{totalEfDom.toLocaleString('pt-BR')}</span>
             </div>
-          </div>
-        </div>
-
-        {/* Card 6: Eleitores Aptos */}
-        <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 pb-1.5 border-b border-slate-100">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Eleitores Aptos</span>
-            <Users className="w-3.5 h-3.5 text-slate-600" />
-          </div>
-          <div className="mt-2">
-            <span className="text-xl font-black text-slate-900 tracking-tight block truncate">
-              {totalAptos.toLocaleString('pt-BR')}
-            </span>
-            <span className="text-[10px] text-slate-500 block">
-              Eleitorado apto
-            </span>
           </div>
         </div>
       </div>
@@ -879,6 +863,10 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                   <div className="flex justify-between">
                     <span>Implant.:</span>
                     <strong className={isSelected ? 'text-emerald-300' : 'text-emerald-700'}>{data.imp}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Desmob.:</span>
+                    <strong className={isSelected ? 'text-indigo-200' : 'text-indigo-700'}>{data.desmob}</strong>
                   </div>
                 </div>
               </button>

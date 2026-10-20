@@ -29,6 +29,13 @@ import { VerificacaoTab } from './components/VerificacaoTab';
 import { SheetConnectionModal } from './components/SheetConnectionModal';
 import { runFaltasAudit } from './services/faltasAuditService';
 
+const formatNowPtBr = () => {
+  const d = new Date();
+  const dateStr = d.toLocaleDateString('pt-BR');
+  const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return `${dateStr} às ${timeStr}`;
+};
+
 export default function App() {
   // Autenticação e perfil de acesso ('admin' tem acesso a links/configurações; 'pm3' apenas visualiza)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -54,7 +61,7 @@ export default function App() {
   // Estado de sincronização em segundo plano
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>(() => {
-    return CsvHelper.getLastSyncTime() || new Date().toLocaleTimeString('pt-BR');
+    return CsvHelper.getLastSyncTime() || formatNowPtBr();
   });
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -162,7 +169,7 @@ export default function App() {
 
       await Promise.allSettled(tasks);
 
-      const nowStr = new Date().toLocaleTimeString('pt-BR');
+      const nowStr = formatNowPtBr();
       setLastSyncTime(nowStr);
       CsvHelper.setLastSyncTime(nowStr);
 
