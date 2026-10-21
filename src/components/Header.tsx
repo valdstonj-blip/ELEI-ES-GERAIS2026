@@ -185,28 +185,30 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </button>
 
-            <button
-              onClick={() => setActiveTab('verificacao')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                activeTab === 'verificacao'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <FileCheck2 className="w-3.5 h-3.5 text-amber-400" />
-              <span>VERIFICAÇÃO DE FALTAS</span>
-              {counts.inconsistencias !== undefined && counts.inconsistencias > 0 && (
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-                    activeTab === 'verificacao'
-                      ? 'bg-amber-400 text-slate-950 font-black'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  }`}
-                >
-                  {counts.inconsistencias}
-                </span>
-              )}
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab('verificacao')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                  activeTab === 'verificacao'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <FileCheck2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>VERIFICAÇÃO DE FALTAS</span>
+                {counts.inconsistencias !== undefined && counts.inconsistencias > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      activeTab === 'verificacao'
+                        ? 'bg-amber-400 text-slate-950 font-black'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}
+                  >
+                    {counts.inconsistencias}
+                  </span>
+                )}
+              </button>
+            )}
           </nav>
         </div>
       </div>

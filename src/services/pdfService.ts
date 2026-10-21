@@ -219,7 +219,7 @@ export function exportLocaisPdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.2);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Eleitores: ${totalAptos.toLocaleString('pt-BR')}`, 13, cardY + 14.8);
+  doc.text('Mapeamento Operacional', 13, cardY + 14.8);
 
   // Card 2: Áreas Sensíveis
   const c2X = 10 + cardW + gap;
@@ -358,7 +358,6 @@ export function exportLocaisPdf(
         g.sensiveis > 0 ? `${g.sensiveis} (${((g.sensiveis / g.total) * 100).toFixed(0)}%)` : '0',
         g.blindado.toString(),
         g.domingo.toString(),
-        g.aptos.toLocaleString('pt-BR'),
         `${g.imp} (${g.total > 0 ? ((g.imp / g.total) * 100).toFixed(0) : 0}%)`,
         `${g.desmob} (${g.total > 0 ? ((g.desmob / g.total) * 100).toFixed(0) : 0}%)`,
       ];
@@ -372,7 +371,6 @@ export function exportLocaisPdf(
       sensiveis > 0 ? `${sensiveis} (${total > 0 ? ((sensiveis / total) * 100).toFixed(0) : 0}%)` : '0',
       blindado.toLocaleString('pt-BR'),
       impDomingo.toLocaleString('pt-BR'),
-      totalAptos.toLocaleString('pt-BR'),
       `${implantadas} (${pctImp}%)`,
       `${desmobilizadas} (${pctDesmob}%)`,
     ],
@@ -391,7 +389,6 @@ export function exportLocaisPdf(
           'Área Sensível',
           'Apoio Blindado',
           'Urna Domingo',
-          'Eleitores Aptos',
           'Urnas Implantadas',
           'Desmobilização',
         ],
@@ -423,15 +420,14 @@ export function exportLocaisPdf(
         valign: 'middle',
       },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 24 },
-        1: { halign: 'left', fontStyle: 'bold', cellWidth: 46 },
-        2: { halign: 'center', fontStyle: 'bold', cellWidth: 25 },
-        3: { halign: 'center', textColor: [185, 28, 28], fontStyle: 'bold', cellWidth: 28 }, // rose-700
-        4: { halign: 'center', textColor: [67, 56, 202], fontStyle: 'bold', cellWidth: 26 }, // indigo-700
-        5: { halign: 'center', textColor: [180, 83, 9], fontStyle: 'bold', cellWidth: 26 },  // amber-700
-        6: { halign: 'right', cellWidth: 34 },
-        7: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 34 }, // emerald-700
-        8: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 34 }, // blue-700
+        0: { halign: 'center', cellWidth: 25 },
+        1: { halign: 'left', fontStyle: 'bold', cellWidth: 52 },
+        2: { halign: 'center', fontStyle: 'bold', cellWidth: 30 },
+        3: { halign: 'center', textColor: [185, 28, 28], fontStyle: 'bold', cellWidth: 34 }, // rose-700
+        4: { halign: 'center', textColor: [67, 56, 202], fontStyle: 'bold', cellWidth: 32 }, // indigo-700
+        5: { halign: 'center', textColor: [180, 83, 9], fontStyle: 'bold', cellWidth: 32 },  // amber-700
+        6: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 36 }, // emerald-700
+        7: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 36 }, // blue-700
       },
     });
 
@@ -482,7 +478,6 @@ export function exportLocaisPdf(
           l.nomeLocal || l.local || '-',
           enderecoCompleto,
           isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
-          (Number(l.qtdAptos || l.totalEleitoresAptos) || 0).toLocaleString('pt-BR'),
           isSim(l.implantada) ? 'SIM' : 'NÃO',
           l.observacoes || l.observacao || 'Sem alterações registradas',
         ];
@@ -497,7 +492,6 @@ export function exportLocaisPdf(
         isSim(l.areaSensivel) ? 'SIM' : 'NÃO',
         isSim(l.implantacaoDomingo) || isSim(l.necessidadeImplantacaoDomingo) ? 'SIM' : 'NÃO',
         isSim(l.blindado) || isSim(l.utilizacaoBlindado) ? 'SIM' : 'NÃO',
-        (Number(l.qtdAptos || l.totalEleitoresAptos) || 0).toLocaleString('pt-BR'),
         isSim(l.implantada) ? 'SIM' : 'NÃO',
         isSim(l.desmobilizada) ? 'SIM' : 'NÃO',
       ];
@@ -533,7 +527,6 @@ export function exportLocaisPdf(
               'Local de Votação',
               'Endereço / Bairro',
               'Sensível',
-              'Aptos',
               'Implant.',
               'Observações e Alterações Registradas',
             ]
@@ -546,7 +539,6 @@ export function exportLocaisPdf(
               'Sensível',
               'Domingo',
               'Blindado',
-              'Aptos',
               'Implantada',
               'Desmobiliz.',
             ],
@@ -585,26 +577,24 @@ export function exportLocaisPdf(
         ? {
             0: { halign: 'center', fontStyle: 'bold', cellWidth: 13 },
             1: { halign: 'center', cellWidth: 18 },
-            2: { halign: 'left', fontStyle: 'bold', cellWidth: 20 },
-            3: { halign: 'left', fontStyle: 'bold', cellWidth: 50 },
-            4: { halign: 'left', cellWidth: 44 },
-            5: { halign: 'center', cellWidth: 15 },
-            6: { halign: 'right', cellWidth: 18 },
-            7: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 17 },
-            8: { halign: 'left', fontStyle: 'bold', textColor: [180, 83, 9], cellWidth: 82 },
+            2: { halign: 'left', fontStyle: 'bold', cellWidth: 22 },
+            3: { halign: 'left', fontStyle: 'bold', cellWidth: 58 },
+            4: { halign: 'left', cellWidth: 52 },
+            5: { halign: 'center', cellWidth: 16 },
+            6: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 18 },
+            7: { halign: 'left', fontStyle: 'bold', textColor: [180, 83, 9], cellWidth: 80 },
           }
         : {
-            0: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 13 },
             1: { halign: 'center', cellWidth: 18 },
-            2: { halign: 'left', fontStyle: 'bold', cellWidth: 22 },
-            3: { halign: 'left', cellWidth: 64 },
-            4: { halign: 'left', cellWidth: 55 },
-            5: { halign: 'center', cellWidth: 17 },
-            6: { halign: 'center', cellWidth: 17 },
-            7: { halign: 'center', cellWidth: 17 },
-            8: { halign: 'right', cellWidth: 19 },
-            9: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 18 },
-            10: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 18 },
+            2: { halign: 'left', fontStyle: 'bold', cellWidth: 24 },
+            3: { halign: 'left', cellWidth: 72 },
+            4: { halign: 'left', cellWidth: 64 },
+            5: { halign: 'center', cellWidth: 18 },
+            6: { halign: 'center', cellWidth: 18 },
+            7: { halign: 'center', cellWidth: 18 },
+            8: { halign: 'center', textColor: [4, 120, 87], fontStyle: 'bold', cellWidth: 16 },
+            9: { halign: 'center', textColor: [29, 78, 216], fontStyle: 'bold', cellWidth: 16 },
           },
     });
   }

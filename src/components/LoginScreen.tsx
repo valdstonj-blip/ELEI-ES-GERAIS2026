@@ -19,9 +19,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setTimeout(() => {
       const u = username.trim().toLowerCase();
       // Credenciais acordadas:
-      // - admin / admin: Acesso total (visualiza e gerencia os links das planilhas)
-      // - pm3 / pm3: Acesso operacional (visualiza dados, mas links de planilhas e conexão ficam 100% ocultos)
-      if (u === 'admin' && password === 'admin') {
+      // - admin / 74029jr: Acesso total (visualiza e gerencia os links das planilhas, verificação de faltas)
+      // - pm3 / pm3: Acesso operacional (visualiza dados, mas links de planilhas e verificação ficam 100% ocultos)
+      if (u === 'admin' && (password === '74029jr' || password.trim() === '74029jr')) {
         localStorage.setItem('eleicoes2026_auth', 'true');
         localStorage.setItem('eleicoes2026_role', 'admin');
         onLoginSuccess();
@@ -47,12 +47,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center mb-3 text-blue-600 shadow-2xs">
             <Lock className="w-6 h-6" />
           </div>
-          <h1 className="text-lg font-bold text-slate-900 tracking-tight uppercase">
-            OPERAÇÃO ELEIÇÕES 2026
+          <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight uppercase">
+            Painel PM/3 de Acompanhamento
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Painel Executivo e Acompanhamento
-          </p>
         </div>
 
         {error && (

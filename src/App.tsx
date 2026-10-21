@@ -49,6 +49,13 @@ export default function App() {
   // Aba ativa de navegação direta no topo
   const [activeTab, setActiveTab] = useState<ActiveTab>('locais');
 
+  // Garante que o perfil operacional (pm3) nunca acerte ou permaneça na aba de verificação de faltas
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'verificacao') {
+      setActiveTab('locais');
+    }
+  }, [isAdmin, activeTab]);
+
   // Modal de conexão e configuração de links
   const [isConnectionModalOpen, setIsConnectionModalOpen] = useState<boolean>(false);
 
@@ -165,7 +172,9 @@ export default function App() {
           }
         }
       })();
-      tasks.push(verificacaoTask);
+      if (isAdmin) {
+        tasks.push(verificacaoTask);
+      }
 
       await Promise.allSettled(tasks);
 
@@ -283,7 +292,11 @@ export default function App() {
       <LoginScreen
         onLoginSuccess={() => {
           setIsAuthenticated(true);
-          setUserRole(localStorage.getItem('eleicoes2026_role') || 'admin');
+          const role = localStorage.getItem('eleicoes2026_role') || 'admin';
+          setUserRole(role);
+          if (role !== 'admin') {
+            setActiveTab('locais');
+          }
         }}
       />
     );
@@ -329,9 +342,9 @@ export default function App() {
               locais: locais.length,
               ocorrencias: countOcorrencias2oTurno,
               faltas: totalFaltosos,
-              verificacao: totalFaltosos,
+              verificacao: isAdmin ? totalFaltosos : undefined,
               sensiveis: locais.filter((l) => isSim(l.areaSensivel)).length,
-              inconsistencias: totalFaltosos,
+              inconsistencias: isAdmin ? totalFaltosos : undefined,
             }}
           />
         );
@@ -410,7 +423,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'verificacao' && (
+        {activeTab === 'verificacao' && isAdmin && (
           <VerificacaoTab
             faltas={faltasVerificadas}
             onUpdateFaltas={(data) => {

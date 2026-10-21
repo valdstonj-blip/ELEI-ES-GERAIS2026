@@ -1174,33 +1174,35 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">LINHA</th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">NUM_ZONA</th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">QTD_APTOS</th>
-                <th className="py-2.5 px-2 whitespace-nowrap bg-slate-900">NOM_MUNICIPIO</th>
-                <th className="py-2.5 px-2 whitespace-nowrap bg-slate-900">NOM_BAIRRO</th>
+                <th className="py-2.5 px-2 whitespace-nowrap bg-slate-900">MUNICIPIO</th>
+                <th className="py-2.5 px-2 whitespace-nowrap bg-slate-900">BAIRRO</th>
                 <th className="py-2.5 px-3 min-w-[200px] bg-slate-900">ENDERECO_LOCAL</th>
                 <th className="py-2.5 px-3 min-w-[220px] bg-slate-900">NOM_LOCAL</th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">CPA</th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">UOP</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">ÁREA SENSIVEL (SIM/NÃO)</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">NECESSIDADE DE IMPLANTAÇÃO DA URNA NO DOMINGO</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-blue-950 text-blue-200" title="Coluna O: Alterações na Votação 2º Turno">
-                  <div className="flex items-center justify-center gap-1">
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">ÁREA SENSÍVEL (SIM / NÃO)</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">NECESSIDADE DE IMPLANTAÇÃO DA URNA NO DOMINGO?</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA (SIM / NÃO)</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900 text-blue-300">EFETIVO 24OUT (SÁBADO)</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900 text-emerald-300">EFETIVO 25OUT (DOMINGO)</th>
+                <th className="py-2.5 px-2 min-w-[150px] bg-slate-900">OBSERVAÇÕES E ALTERAÇÕES</th>
+                <th className="py-2.5 px-2 min-w-[170px] bg-blue-950 text-blue-200" title="ALTERAÇÕES NA VOTAÇÃO 2° TURNO">
+                  <div className="flex items-center gap-1">
                     <FileText className="w-3.5 h-3.5 text-blue-400" />
                     <span>ALTERAÇÕES NA VOTAÇÃO 2° TURNO</span>
                   </div>
                 </th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap bg-slate-900">UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA(SIM/NÃO)</th>
-                <th className="py-2.5 px-2 min-w-[150px] bg-slate-900">OBSERVAÇÕS E ALTERAÇÕES</th>
-                <th className="py-2.5 px-2 min-w-[180px] bg-amber-950 text-amber-200">
+                <th className="py-2.5 px-2 min-w-[170px] bg-amber-950 text-amber-200" title="ALTERAÇÃO_LOCAL_MOTIVO_ROUBO_FURTO_CABO_ENERGIA">
                   <div className="flex items-center gap-1">
                     <Zap className="w-3.5 h-3.5 text-amber-400" />
                     <span>ALT. ENERGIA / CABOS</span>
                   </div>
                 </th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-emerald-950 text-emerald-200" title="Sincronizado diretamente da Planilha Oficial">
-                  URNA IMPLANTADA
+                  URNA IMPLANTADA NO LOCAL DE VOTAÇÃO ( SIM / NÃO )
                 </th>
                 <th className="py-2.5 px-2 text-center whitespace-nowrap bg-blue-950 text-blue-200" title="Sincronizado diretamente da Planilha Oficial">
-                  DESMOBILIZAÇÃO.
+                  DESMOBILIZAÇÃO DO LOCAL DE VOTAÇÃO (SIM / NÃO )
                 </th>
               </tr>
             </thead>
@@ -1208,7 +1210,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
             <tbody className="divide-y divide-slate-100">
               {paginatedLocais.length === 0 ? (
                 <tr>
-                  <td colSpan={17} className="py-12 text-center text-slate-400">
+                  <td colSpan={19} className="py-12 text-center text-slate-400">
                     Nenhum local de votação encontrado com os critérios aplicados.
                   </td>
                 </tr>
@@ -1317,7 +1319,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                         </span>
                       </td>
 
-                      {/* 10. NECESSIDADE DE IMPLANTAÇÃO DA URNA NO DOMINGO */}
+                      {/* 10. NECESSIDADE DE IMPLANTAÇÃO DA URNA NO DOMINGO? */}
                       <td className="py-2.5 px-2 text-center">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
@@ -1330,7 +1332,49 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                         </span>
                       </td>
 
-                      {/* ALTERAÇÕES NA VOTAÇÃO 2° TURNO (Coluna O da Planilha) */}
+                      {/* 11. UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA (SIM / NÃO) */}
+                      <td className="py-2.5 px-2 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            isBlindado
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              : 'bg-slate-50 text-slate-400 border-slate-200'
+                          }`}
+                        >
+                          {isBlindado ? 'SIM' : 'NÃO'}
+                        </span>
+                      </td>
+
+                      {/* 12. EFETIVO SUGERIDO NO DIA 24OUT26 (SÁBADO) */}
+                      <td className="py-2.5 px-2 text-center font-mono font-bold text-blue-900 bg-blue-50/30">
+                        {loc.efetivoSabado || 0}
+                      </td>
+
+                      {/* 13. EFETIVO SUGERIDO NO DIA 25OUT26 (DOMINGO) */}
+                      <td className="py-2.5 px-2 text-center font-mono font-bold text-emerald-900 bg-emerald-50/30">
+                        {loc.efetivoDomingo || 0}
+                      </td>
+
+                      {/* 14. OBSERVAÇÕES E ALTERAÇÕES (LOCAIS DE VOTAÇÃO) */}
+                      <td className="py-2.5 px-2 text-[11px]">
+                        {hasAlt ? (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLocal(loc);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 font-bold max-w-[280px] shadow-2xs transition-colors cursor-pointer"
+                            title="Clique para abrir e ler a alteração completa"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span className="truncate">{obsTexto}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+
+                      {/* 15. ALTERAÇÕES NA VOTAÇÃO 2° TURNO (ao lado de alt.energia/cabos) */}
                       <td className="py-2.5 px-2 text-[11px] text-center">
                         {loc.hasAlteracoes2Turno ? (
                           <div
@@ -1351,39 +1395,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                         )}
                       </td>
 
-                      {/* 11. UTILIZAÇÃO DO BLINDADO PARA IMPLANTAÇÃO DA URNA(SIM/NÃO) */}
-                      <td className="py-2.5 px-2 text-center">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            isBlindado
-                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                              : 'bg-slate-50 text-slate-400 border-slate-200'
-                          }`}
-                        >
-                          {isBlindado ? 'SIM' : 'NÃO'}
-                        </span>
-                      </td>
-
-                      {/* 12. OBSERVAÇÕS E ALTERAÇÕES */}
-                      <td className="py-2.5 px-2 text-[11px]">
-                        {hasAlt ? (
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedLocal(loc);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 font-bold max-w-[280px] shadow-2xs transition-colors cursor-pointer"
-                            title="Clique para abrir e ler a alteração completa"
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                            <span className="truncate">{obsTexto}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-
-                      {/* 13. ALTERAÇÃO ENERGIA / FURTO DE CABOS */}
+                      {/* 16. ALTERAÇÃO_LOCAL_MOTIVO_ROUBO_FURTO_CABO_ENERGIA (ALT. ENERGIA / CABOS) */}
                       <td className="py-2.5 px-2 text-[11px]">
                         {loc.hasAlteracaoEnergia ? (
                           <div
@@ -1402,7 +1414,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                         )}
                       </td>
 
-                      {/* 15. URNA IMPLANTADA (Dado Oficial da Planilha) */}
+                      {/* 17. URNA IMPLANTADA NO LOCAL DE VOTAÇÃO ( SIM / NÃO ) */}
                       <td
                         className="py-2.5 px-2 text-center"
                         title={isSim(loc.implantada) ? 'Urna Implantada: SIM (Planilha Oficial)' : 'Urna Implantada: NÃO (Planilha Oficial)'}
@@ -1419,7 +1431,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
                         )}
                       </td>
 
-                      {/* 16. DESMOBILIZAÇÃO. (Dado Oficial da Planilha) */}
+                      {/* 18. DESMOBILIZAÇÃO DO LOCAL DE VOTAÇÃO (SIM / NÃO ) */}
                       <td
                         className="py-2.5 px-2 text-center"
                         title={isSim(loc.desmobilizada) ? 'Desmobilização: SIM (Planilha Oficial)' : 'Desmobilização: NÃO (Planilha Oficial)'}
