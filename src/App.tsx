@@ -83,11 +83,14 @@ export default function App() {
    * - Executa as 3 requisições de forma simultânea (Promise.allSettled)
    * - Nunca bloqueia uma base se a outra estiver lenta
    */
-  const syncData = useCallback(async (silent = false) => {
+  const syncData = useCallback(async (silent = false, sourceTab?: ActiveTab) => {
     setIsSyncing(true);
     let updatedSources = 0;
-    let detalhes = '';
     let errorMessage = '';
+    let locaisMsg = '';
+    let ocorrenciasMsg = '';
+    let faltasMsg = '';
+    let verifMsg = '';
 
     try {
       const tasks: Promise<void>[] = [];
@@ -104,7 +107,7 @@ export default function App() {
             updatedSources++;
             const imp = parsed.filter((l) => isSim(l.implantada)).length;
             const desm = parsed.filter((l) => isSim(l.desmobilizada)).length;
-            detalhes = `${parsed.length.toLocaleString('pt-BR')} locais (${imp} urnas implantadas, ${desm} desmobilizadas)`;
+            locaisMsg = `${parsed.length.toLocaleString('pt-BR')} locais (${imp} urnas implantadas, ${desm} desmobilizadas)`;
           }
         } catch (err: any) {
           console.warn('Aviso sincronização remota locais:', err);
@@ -128,6 +131,7 @@ export default function App() {
               setOcorrencias(parsed);
               CsvHelper.saveOcorrencias(parsed);
               updatedSources++;
+              ocorrenciasMsg = `Planilha de Ocorrências: ${parsed.length} ocorrência(s) computada(s)`;
             }
           } catch (err: any) {
             console.warn('Erro ao atualizar Planilha de Ocorrências:', err);
@@ -147,6 +151,8 @@ export default function App() {
               setFaltas(parsed);
               CsvHelper.saveFaltas(parsed);
               updatedSources++;
+              const totFaltas = parsed.reduce((acc, f) => acc + countPoliciaisInText(f.faltasPoe || f.motivo), 0);
+              faltasMsg = `Planilha de Faltas (2º Turno): ${parsed.length} envio(s) (${totFaltas} policiais faltosos apurados)`;
             }
           } catch (err: any) {
             console.warn('Erro ao atualizar Planilha de Faltas:', err);
@@ -166,6 +172,8 @@ export default function App() {
               setFaltasVerificadas(parsed);
               CsvHelper.saveVerificacao(parsed);
               updatedSources++;
+              const totVerif = parsed.reduce((acc, f) => acc + countPoliciaisInText(f.faltasPoe || f.motivo), 0);
+              verifMsg = `Planilha de Verificação: ${parsed.length} envio(s) (${totVerif} faltas validadas)`;
             }
           } catch (err: any) {
             console.warn('Erro ao atualizar Planilha de Verificação:', err);
@@ -184,6 +192,20 @@ export default function App() {
 
       if (!silent) {
         if (updatedSources > 0) {
+          const tab = sourceTab || activeTab;
+          let detalhes = '';
+          if (tab === 'faltas' && faltasMsg) {
+            detalhes = faltasMsg;
+          } else if (tab === 'ocorrencias' && ocorrenciasMsg) {
+            detalhes = ocorrenciasMsg;
+          } else if (tab === 'verificacao' && verifMsg) {
+            detalhes = verifMsg;
+          } else if (tab === 'locais' && locaisMsg) {
+            detalhes = locaisMsg;
+          } else {
+            detalhes = faltasMsg || ocorrenciasMsg || locaisMsg || '';
+          }
+
           showToast(`Sincronização concluída às ${nowStr}! ${detalhes ? `• ${detalhes}` : ''}`, 'success');
         } else if (errorMessage) {
           showToast(errorMessage, 'error');
@@ -197,7 +219,7 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [activeTab, isAdmin]);
 
   // Sincronização inicial automática dos links e bases ao abrir em qualquer dispositivo ou navegador
   useEffect(() => {
@@ -333,7 +355,7 @@ export default function App() {
             setActiveTab={setActiveTab}
             isSyncing={isSyncing}
             lastSyncTime={lastSyncTime}
-            onManualSync={() => syncData(false)}
+            onManualSync={() => syncData(false, activeTab)}
             onLogout={handleLogout}
             onOpenSettings={isAdmin ? () => setIsConnectionModalOpen(true) : undefined}
             isAdmin={isAdmin}
@@ -394,7 +416,7 @@ export default function App() {
               setLocais(updated);
               CsvHelper.saveLocais(updated);
             }}
-            onSync={() => syncData(false)}
+            onSync={() => syncData(false, 'locais')}
             isSyncing={isSyncing}
           />
         )}
@@ -404,7 +426,7 @@ export default function App() {
             ocorrencias={ocorrencias}
             onAddOcorrencia={handleAddOcorrencia}
             lastSyncTime={lastSyncTime}
-            onSync={() => syncData(false)}
+            onSync={() => syncData(false, 'ocorrencias')}
             isSyncing={isSyncing}
             onOpenSettings={isAdmin ? () => setIsConnectionModalOpen(true) : undefined}
             isAdmin={isAdmin}
@@ -416,7 +438,7 @@ export default function App() {
             faltas={faltas}
             onAddFalta={handleAddFalta}
             lastSyncTime={lastSyncTime}
-            onSync={() => syncData(false)}
+            onSync={() => syncData(false, 'faltas')}
             isSyncing={isSyncing}
             onOpenSettings={isAdmin ? () => setIsConnectionModalOpen(true) : undefined}
             isAdmin={isAdmin}
@@ -433,7 +455,7 @@ export default function App() {
               CsvHelper.saveFaltas(data);
             }}
             lastSyncTime={lastSyncTime}
-            onSync={() => syncData(false)}
+            onSync={() => syncData(false, 'verificacao')}
             isSyncing={isSyncing}
             isAdmin={isAdmin}
           />

@@ -26,6 +26,8 @@ import {
   FileCheck,
   BarChart3,
   ChevronUp,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Ocorrencia } from '../types';
 import { exportOcorrenciasPdf, matchesCarimboDate } from '../services/pdfService';
@@ -193,6 +195,16 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
 
   // Modo de visualização da tabela: Consolidada ou Todos os Cabeçalhos
   const [viewMode, setViewMode] = useState<'consolidada' | 'todos_cabecalhos'>('consolidada');
+
+  // Feedback de cópia do texto no modal da ficha
+  const [copiedDinamica, setCopiedDinamica] = useState<boolean>(false);
+
+  const handleCopyDinamica = (text: string) => {
+    if (!text || text === '-') return;
+    navigator.clipboard.writeText(text);
+    setCopiedDinamica(true);
+    setTimeout(() => setCopiedDinamica(false), 2000);
+  };
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 20;
@@ -1134,10 +1146,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
                     R.O.
                   </th>
-                  <th className="py-2.5 px-3 min-w-[220px] max-w-[320px] bg-slate-900">
-                    DINÂMICA / HISTÓRICO
-                  </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[100px] text-center bg-slate-900">
                     FICHA
                   </th>
                 </tr>
@@ -1185,7 +1194,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
                     R.O.
                   </th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[90px] text-center bg-slate-900">
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[100px] text-center bg-slate-900">
                     FICHA
                   </th>
                 </tr>
@@ -1195,7 +1204,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               {paginatedOcorrencias.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={viewMode === 'consolidada' ? 12 : 15}
+                    colSpan={viewMode === 'consolidada' ? 11 : 15}
                     className="py-12 text-center text-slate-400"
                   >
                     Nenhuma ocorrência encontrada para os filtros selecionados.
@@ -1318,19 +1327,12 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                           </span>
                         </td>
 
-                        {/* 11. DINÂMICA */}
-                        <td className="py-2.5 px-3 align-top">
-                          <p className="text-[11px] text-slate-700 leading-relaxed line-clamp-2" title={dinamicaText}>
-                            {dinamicaText}
-                          </p>
-                        </td>
-
-                        {/* 12. FICHA */}
+                        {/* 11. FICHA */}
                         <td className="py-2.5 px-3 text-center align-top whitespace-nowrap">
                           <button
                             onClick={() => setModalOcorrencia(oc)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-colors cursor-pointer"
-                            title="Ver todos os campos e perguntas da planilha para este envio"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                            title="Ver ficha completa da ocorrência com dinâmica e histórico dos fatos"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>Ver Ficha</span>
@@ -1417,10 +1419,11 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                       <td className="py-2.5 px-3 text-center align-top whitespace-nowrap">
                         <button
                           onClick={() => setModalOcorrencia(oc)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                          title="Ver ficha completa da ocorrência com dinâmica e histórico dos fatos"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>Ficha</span>
+                          <span>Ver Ficha</span>
                         </button>
                       </td>
                     </tr>
@@ -1639,13 +1642,18 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                 </div>
 
                 {/* Dinâmica Completa */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    Dinâmica da Ocorrência de Vulto / Interesse
-                  </span>
-                  <p className="text-slate-800 text-xs leading-relaxed whitespace-pre-wrap">
-                    {modalOcorrencia.dinamica || 'Sem relato da dinâmica.'}
-                  </p>
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                      Dinâmica da Ocorrência de Vulto / Histórico dos Fatos
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-slate-200">
+                    <p className="text-slate-800 text-xs leading-relaxed whitespace-pre-wrap break-words font-medium">
+                      {modalOcorrencia.dinamica || modalOcorrencia.historico || 'Sem relato da dinâmica registrado na planilha.'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

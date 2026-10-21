@@ -451,16 +451,32 @@ export function exportVerificacaoPdf(
 
   currentY += 2;
 
-  const diaSummaryRows = statsDias.dias.map((d) => [
-    d.diaLabel,
-    `${d.totalEnvios} envio(s)`,
-    d.totalFaltas > 0 ? `${d.totalFaltas} falta(s)` : '0',
-    d.isMaior && d.totalFaltas > 0 ? 'MAIOR NUMERO DE FALTAS' : '-',
-  ]);
+  const displayedDiasVerif =
+    diaFilter === '24OUT'
+      ? statsDias.dias.filter((d) => d.codigoDia === '24OUT')
+      : diaFilter === '25OUT'
+      ? statsDias.dias.filter((d) => d.codigoDia === '25OUT')
+      : statsDias.dias.filter((d) => d.codigoDia === '24OUT' || d.codigoDia === '25OUT' || d.totalEnvios > 0);
 
-  const maiorDataTextoVerif = statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
-    ? `Data com mais faltas: ${statsDias.diaMaisFaltoso.diaLabel}`
-    : 'Distribuicao homogenea';
+  const totalEnviosExibidos = displayedDiasVerif.reduce((acc, d) => acc + d.totalEnvios, 0);
+  const totalFaltasExibidas = displayedDiasVerif.reduce((acc, d) => acc + d.totalFaltas, 0);
+
+  const diaSummaryRows = displayedDiasVerif.map((d) => {
+    let indicador = d.percentual || '0,0%';
+    if (diaFilter !== 'TODOS') {
+      indicador = '100,0% (Data Selecionada)';
+    } else if (d.totalFaltas === 0) {
+      indicador = '0,0%';
+    } else if (d.isMaior && displayedDiasVerif.filter((x) => x.totalFaltas > 0).length > 1) {
+      indicador = `${d.percentual} (Maior Incidência)`;
+    }
+    return [
+      d.diaLabel,
+      `${d.totalEnvios} envio(s)`,
+      d.totalFaltas > 0 ? `${d.totalFaltas} falta(s)` : '0',
+      indicador,
+    ];
+  });
 
   autoTable(doc, {
     startY: currentY,
@@ -476,9 +492,9 @@ export function exportVerificacaoPdf(
     foot: [
       [
         'TOTAL GERAL',
-        `${statsDias.totalEnviosGeral} envio(s)`,
-        `${statsDias.totalFaltasGeral} falta(s)`,
-        maiorDataTextoVerif,
+        `${totalEnviosExibidos} envio(s)`,
+        `${totalFaltasExibidas} falta(s)`,
+        diaFilter !== 'TODOS' ? '100,0%' : '100,0%',
       ],
     ],
     theme: 'grid',

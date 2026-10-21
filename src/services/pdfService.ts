@@ -773,37 +773,43 @@ export function matchesCarimboDate(
   const c = (carimbo || '').trim().toLowerCase();
   const fb = (fallbackText || '').trim().toLowerCase();
 
-  // Testes para 24 de Outubro (Sábado - 2º Turno Oficial)
-  const is24Out =
-    c.includes('24/10') ||
-    c.includes('24out') ||
-    c.includes('24-10') ||
-    c.includes('24 de out') ||
-    fb.includes('24out') ||
-    fb.includes('24/10') ||
-    fb.includes('24 de out') ||
-    fb.includes('sábado') ||
-    fb.includes('sabado') ||
-    // Se o carimbo for anterior a 25/10 e não indicar domingo, enquadra no 1º dia do 2º Turno
-    (!c.includes('25/10') && !fb.includes('25out') && !fb.includes('domingo'));
-
-  // Testes para 25 de Outubro (Domingo - 2º Turno Oficial)
-  const is25Out =
-    c.includes('25/10') ||
-    c.includes('25out') ||
-    c.includes('25-10') ||
-    c.includes('25 de out') ||
+  // Detecção explícita e prioritária dos códigos de data do 2º Turno (24OUT e 25OUT)
+  // Caso haja alguma divergência de preenchimento (ex: '25OUT26' com 'Sábado' digitado em parênteses),
+  // o código explícito da data '25OUT' / '24OUT' tem precedência total e inequívoca.
+  const is25Explicit =
     fb.includes('25out') ||
     fb.includes('25/10') ||
+    fb.includes('25-10') ||
     fb.includes('25 de out') ||
-    fb.includes('domingo');
+    c.includes('25/10') ||
+    c.includes('25out') ||
+    c.includes('25-10');
+
+  const is24Explicit =
+    fb.includes('24out') ||
+    fb.includes('24/10') ||
+    fb.includes('24-10') ||
+    fb.includes('24 de out') ||
+    c.includes('24/10') ||
+    c.includes('24out') ||
+    c.includes('24-10');
 
   if (targetDay === '24OUT') {
-    return is24Out;
+    if (is24Explicit) return true;
+    if (is25Explicit) return false;
+    // Se não houver data explícita, avalia dia da semana
+    if (fb.includes('sábado') || fb.includes('sabado')) return true;
+    if (fb.includes('domingo')) return false;
+    return !c.includes('25/10') && !fb.includes('25out');
   }
 
   if (targetDay === '25OUT') {
-    return is25Out;
+    if (is25Explicit) return true;
+    if (is24Explicit) return false;
+    // Se não houver data explícita, avalia dia da semana
+    if (fb.includes('domingo')) return true;
+    if (fb.includes('sábado') || fb.includes('sabado')) return false;
+    return c.includes('25/10') || fb.includes('25out');
   }
 
   return true;
@@ -1431,20 +1437,39 @@ export function computeFaltasPorDia(faltas: FaltaEfetivo[]): {
     const c = (f.carimbo || '').trim().toLowerCase();
     const s = (f.servicoDia || '').trim().toLowerCase();
     const d = (f.data || '').trim().toLowerCase();
-    const full = `${c} ${s} ${d}`;
+    const t = (f.turno || '').trim().toLowerCase();
+    const full = `${s} ${d} ${t} ${c}`;
 
-    const is25 =
-      full.includes('25/10') ||
-      full.includes('25out') ||
-      full.includes('25-10') ||
-      full.includes('domingo');
+    const is25Explicit =
+      s.includes('25out') ||
+      s.includes('25/10') ||
+      s.includes('25-10') ||
+      d.includes('25/10') ||
+      t.includes('25out') ||
+      c.includes('25/10') ||
+      c.includes('25out');
 
-    const is24 =
-      full.includes('24/10') ||
-      full.includes('24out') ||
-      full.includes('24-10') ||
-      full.includes('sábado') ||
-      full.includes('sabado');
+    const is24Explicit =
+      s.includes('24out') ||
+      s.includes('24/10') ||
+      s.includes('24-10') ||
+      d.includes('24/10') ||
+      t.includes('24out') ||
+      c.includes('24/10') ||
+      c.includes('24out');
+
+    let is25 = false;
+    let is24 = false;
+
+    if (is25Explicit) {
+      is25 = true;
+    } else if (is24Explicit) {
+      is24 = true;
+    } else if (full.includes('domingo')) {
+      is25 = true;
+    } else if (full.includes('sábado') || full.includes('sabado')) {
+      is24 = true;
+    }
 
     if (is25) {
       dia25.totalEnvios += 1;
@@ -1934,23 +1959,40 @@ export function exportFaltasPdf(
   doc.setTextColor(30, 41, 59);
   doc.text('3. QUADRO RESUMO DE FALTAS POR DATA DO EVENTO', 10, diaStartY);
 
-  const diaSummaryRows = statsDias.dias.map((d) => [
-    d.diaLabel,
-    `${d.totalEnvios} envio(s)`,
-    d.totalFaltas > 0 ? `${d.totalFaltas} falta(s)` : '0',
-    d.isMaior && d.totalFaltas > 0 ? 'MAIOR NUMERO DE FALTAS' : '-',
-  ]);
+  // Filtra as datas exibidas no Quadro 3 estritamente de acordo com o filtro selecionado
+  const displayedDias =
+    diaFilter === '24OUT'
+      ? statsDias.dias.filter((d) => d.codigoDia === '24OUT')
+      : diaFilter === '25OUT'
+      ? statsDias.dias.filter((d) => d.codigoDia === '25OUT')
+      : statsDias.dias.filter((d) => d.codigoDia === '24OUT' || d.codigoDia === '25OUT' || d.totalEnvios > 0);
 
-  const maiorDataTexto = statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0
-    ? `Data com mais faltas: ${statsDias.diaMaisFaltoso.diaLabel}`
-    : 'Distribuicao homogenea';
+  const totalEnviosExibidos = displayedDias.reduce((acc, d) => acc + d.totalEnvios, 0);
+  const totalFaltasExibidas = displayedDias.reduce((acc, d) => acc + d.totalFaltas, 0);
+
+  const diaSummaryRows = displayedDias.map((d) => {
+    let indicador = d.percentual || '0,0%';
+    if (diaFilter !== 'TODOS') {
+      indicador = '100,0% (Data Selecionada)';
+    } else if (d.totalFaltas === 0) {
+      indicador = '0,0%';
+    } else if (d.isMaior && displayedDias.filter((x) => x.totalFaltas > 0).length > 1) {
+      indicador = `${d.percentual} (Maior Incidência)`;
+    }
+    return [
+      d.diaLabel,
+      `${d.totalEnvios} envio(s)`,
+      d.totalFaltas > 0 ? `${d.totalFaltas} falta(s)` : '0',
+      indicador,
+    ];
+  });
 
   const diaSummaryFoot = [
     [
       'TOTAL GERAL',
-      `${statsDias.totalEnviosGeral} envio(s)`,
-      `${statsDias.totalFaltasGeral} falta(s)`,
-      maiorDataTexto,
+      `${totalEnviosExibidos} envio(s)`,
+      `${totalFaltasExibidas} falta(s)`,
+      diaFilter !== 'TODOS' ? '100,0%' : '100,0%',
     ],
   ];
 

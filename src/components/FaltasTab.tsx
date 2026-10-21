@@ -537,12 +537,16 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
                     {d.totalFaltas} falta(s)
                   </td>
                   <td className="py-2 px-3 text-center font-semibold text-[11px]">
-                    {d.isMaior && d.totalFaltas > 0 ? (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-rose-700 border border-slate-200">
-                        Maior número de faltas
+                    {d.totalFaltas > 0 ? (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                        d.isMaior && statsDias.dias.filter((x) => x.totalFaltas > 0).length > 1
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                      }`}>
+                        {d.percentual} {d.isMaior && statsDias.dias.filter((x) => x.totalFaltas > 0).length > 1 ? '• Maior Incidência' : ''}
                       </span>
                     ) : (
-                      <span className="text-slate-400">-</span>
+                      <span className="text-slate-400">0.0%</span>
                     )}
                   </td>
                   <td className="py-2 px-3 text-center">

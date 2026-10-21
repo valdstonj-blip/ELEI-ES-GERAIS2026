@@ -163,6 +163,13 @@ async function fetchLiveFaltasFromGoogle(targetUrl?: string): Promise<any[]> {
       if (!nomeGuerra && !rg && !faltasPoe) continue;
 
       const cpa = normalizeCpaName(cpaRaw);
+      const dataStr =
+        servicoDia.includes('24OUT') || servicoDia.includes('24/10')
+          ? '24/10/2026'
+          : servicoDia.includes('25OUT') || servicoDia.includes('25/10')
+          ? '25/10/2026'
+          : '24/10/2026';
+
       parsed.push({
         id: `falta-resp-${i}`,
         carimbo,
@@ -175,7 +182,7 @@ async function fetchLiveFaltasFromGoogle(targetUrl?: string): Promise<any[]> {
         opm,
         faltasPoe,
         dispensasPoe: 'sem alteração',
-        data: '24/10/2026',
+        data: dataStr,
         turno: servicoDia,
         postoGrad: posto,
         opmOrigem: `${cpa} / ${opm}`,
