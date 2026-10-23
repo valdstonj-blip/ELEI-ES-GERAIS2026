@@ -47,7 +47,7 @@ interface OcorrenciasTabProps {
 const CRIMES_FORMULARIO = [
   {
     id: 'Crimes comuns contra candidatos',
-    title: 'Crimes comuns contra candidatos',
+    title: 'Crimes contra Candidatos',
     short: 'Contra Candidatos',
     key: 'crimesCandidatos' as const,
     color: 'amber',
@@ -58,7 +58,7 @@ const CRIMES_FORMULARIO = [
   },
   {
     id: 'Crimes comuns nos locais de votação/apuração',
-    title: 'Crimes comuns nos locais de votação/apuração',
+    title: 'Crimes nos Locais de Votação',
     short: 'Locais de Votação',
     key: 'crimesLocaisVotacao' as const,
     color: 'blue',
@@ -80,8 +80,7 @@ const CRIMES_FORMULARIO = [
   },
   {
     id: 'Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação',
-    title:
-      'Ocorrências e Incidentes de Segurança Pública e Defesa Social no entorno e/ou locais de votação',
+    title: 'Incidentes de Seg. Pública',
     short: 'Incidentes Segurança',
     key: 'incidentesSeguranca' as const,
     color: 'sky',
@@ -92,7 +91,7 @@ const CRIMES_FORMULARIO = [
   },
   {
     id: 'Prisões/apreensões no entorno e/ou locais de votação',
-    title: 'Prisões/apreensões no entorno e/ou locais de votação',
+    title: 'Ocorrências c/ Prisões/Apreensões',
     short: 'Prisões / Apreensões',
     key: 'prisoesApreensoes' as const,
     color: 'rose',
@@ -625,6 +624,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   setSelectedSpecificCrime(null);
                   setCurrentPage(1);
                 }}
+                title={`${count} ocorrência(s) registrada(s) nesta natureza. O número exato de indivíduos consta na dinâmica da ocorrência.`}
                 className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
                   isSelected
                     ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/20 shadow-xs'
@@ -639,13 +639,18 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     {cat.title}
                   </span>
                 </div>
-                <span
-                  className={`px-2 py-0.5 rounded-md text-xs font-black shrink-0 ${
-                    count > 0 ? cat.badgeColor : 'bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  {count}
-                </span>
+                <div className="flex flex-col items-end shrink-0">
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-xs font-black ${
+                      count > 0 ? cat.badgeColor : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-medium">
+                    {count === 1 ? 'ocorr.' : 'ocorr.'}
+                  </span>
+                </div>
               </button>
             );
           })}
@@ -660,6 +665,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                 setSelectedSpecificCrime(null);
                 setCurrentPage(1);
               }}
+              title={`${crimesBreakdown.countSemCrimeComDinamica} ocorrência(s) com dinâmica descrita sem tipificação selecionada. O número exato de indivíduos consta na dinâmica da ocorrência.`}
               className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
                 selectedCrimeFilter === 'SEM_CRIME_COM_DINAMICA'
                   ? 'bg-amber-50/90 border-amber-500 ring-2 ring-amber-500/20 shadow-xs'
@@ -674,11 +680,29 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   Sem crime tipificado
                 </span>
               </div>
-              <span className="px-2 py-0.5 rounded-md text-xs font-black shrink-0 bg-amber-100 text-amber-800 border border-amber-200">
-                {crimesBreakdown.countSemCrimeComDinamica}
-              </span>
+              <div className="flex flex-col items-end shrink-0">
+                <span className="px-2 py-0.5 rounded-md text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
+                  {crimesBreakdown.countSemCrimeComDinamica}
+                </span>
+                <span className="text-[9px] text-amber-700 font-medium">
+                  {crimesBreakdown.countSemCrimeComDinamica === 1 ? 'ocorr.' : 'ocorr.'}
+                </span>
+              </div>
             </button>
           )}
+        </div>
+
+        {/* NOTA METODOLÓGICA OFICIAL DA ESTATÍSTICA OPERACIONAL */}
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700">
+          <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <div className="leading-relaxed text-[11px] space-y-0.5">
+            <span className="font-bold text-slate-900 uppercase tracking-wide block text-[10px]">
+              * NOTA METODOLÓGICA / TÉCNICA:
+            </span>
+            <p className="text-slate-600">
+              Os quantitativos referem-se ao número de ocorrências e registros informados pelas OPMs via formulário de ocorrência. O quantitativo exato de indivíduos conduzidos/custodiados caso existam, constam no histórico (Dinâmica do Fato) de cada registro na tabela.
+            </p>
+          </div>
         </div>
 
         {/* Tabela de Totalização Consolidada das Tipificações (Expandível para não poluir a tela) */}
@@ -707,10 +731,10 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-800 text-white font-bold text-[11px]">
                   <tr>
-                    <th className="py-2 px-3">Categoria Oficial do Formulário</th>
-                    <th className="py-2 px-3">Tipificação do Crime / Registro Assinalado</th>
-                    <th className="py-2 px-3 text-center">Quantidade</th>
-                    <th className="py-2 px-3 text-center">% do Total</th>
+                    <th className="py-2 px-3">Natureza / Categoria do Formulário</th>
+                    <th className="py-2 px-3">Tipificação Assinalada pelas OPMs</th>
+                    <th className="py-2 px-3 text-center">Ocorrências Notificadas</th>
+                    <th className="py-2 px-3 text-center">% das Ocorrências (Proporção)*</th>
                     <th className="py-2 px-3 text-center">Filtro</th>
                   </tr>
                 </thead>
@@ -735,11 +759,17 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                         <td className="py-2 px-3 text-slate-900 font-semibold">
                           {item.crime}
                         </td>
-                        <td className="py-2 px-3 text-center font-bold text-red-600 text-sm">
-                          {item.count}
+                        <td className="py-2 px-3 text-center">
+                          <span className="font-bold text-red-600 text-sm">{item.count}</span>
+                          <span className="text-[10px] text-slate-400 block font-sans">
+                            {item.count === 1 ? 'ocorrência' : 'ocorrências'}
+                          </span>
                         </td>
-                        <td className="py-2 px-3 text-center text-slate-500 font-mono">
-                          {pct}
+                        <td className="py-2 px-3 text-center font-mono">
+                          <span className="font-bold text-slate-800 text-xs">{pct}</span>
+                          <span className="text-[10px] text-slate-400 block font-sans">
+                            ({item.count} de {crimesBreakdown.totalGeral} reg.)
+                          </span>
                         </td>
                         <td className="py-2 px-3 text-center">
                           <button
@@ -774,13 +804,23 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                       <td className="py-2 px-3 text-slate-800 italic">
                         Registros com dinâmica/fato narrado (sem seleção de crime categorizado)
                       </td>
-                      <td className="py-2 px-3 text-center font-bold text-amber-700 text-sm">
-                        {crimesBreakdown.countSemCrimeComDinamica}
+                      <td className="py-2 px-3 text-center">
+                        <span className="font-bold text-amber-700 text-sm">
+                          {crimesBreakdown.countSemCrimeComDinamica}
+                        </span>
+                        <span className="text-[10px] text-amber-600/70 block font-sans">
+                          {crimesBreakdown.countSemCrimeComDinamica === 1 ? 'ocorrência' : 'ocorrências'}
+                        </span>
                       </td>
-                      <td className="py-2 px-3 text-center text-slate-500 font-mono">
-                        {crimesBreakdown.totalGeral > 0
-                          ? ((crimesBreakdown.countSemCrimeComDinamica / crimesBreakdown.totalGeral) * 100).toFixed(1) + '%'
-                          : '-'}
+                      <td className="py-2 px-3 text-center text-slate-700 font-mono">
+                        <span className="font-bold text-xs">
+                          {crimesBreakdown.totalGeral > 0
+                            ? ((crimesBreakdown.countSemCrimeComDinamica / crimesBreakdown.totalGeral) * 100).toFixed(1) + '%'
+                            : '-'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block font-sans">
+                          ({crimesBreakdown.countSemCrimeComDinamica} de {crimesBreakdown.totalGeral} reg.)
+                        </span>
                       </td>
                       <td className="py-2 px-3 text-center">
                         <button
@@ -808,12 +848,12 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                 <tfoot className="bg-slate-100 text-slate-900 font-bold text-[11px] border-t border-slate-200">
                   <tr>
                     <td colSpan={2} className="py-2 px-3 uppercase tracking-wider">
-                      Total Geral de Fatos e Ocorrências Registradas
+                      Total Geral de Ocorrências e Registros no Pleito
                     </td>
                     <td className="py-2 px-3 text-center text-red-700 text-sm">
-                      {crimesBreakdown.totalGeral}
+                      {crimesBreakdown.totalGeral} ocorr.
                     </td>
-                    <td className="py-2 px-3 text-center">100%</td>
+                    <td className="py-2 px-3 text-center font-mono">100.0%</td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -1180,7 +1220,7 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                     4. INCIDENTES SEGURANÇA
                   </th>
                   <th className="py-2.5 px-3 min-w-[180px] bg-slate-900">
-                    5. PRISÕES/APREENSÕES
+                    5. REG. PRISÕES/APREENSÕES
                   </th>
                   <th className="py-2.5 px-3 min-w-[140px] bg-slate-900">
                     LOCAL
@@ -1641,16 +1681,46 @@ export const OcorrenciasTab: React.FC<OcorrenciasTabProps> = ({
                   </div>
                 </div>
 
-                {/* Dinâmica Completa */}
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-                      Dinâmica da Ocorrência de Vulto / Histórico dos Fatos
-                    </span>
+                {/* Dinâmica Completa com Ação de Cópia e Destaque Profissional */}
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-wide block">
+                          Dinâmica da Ocorrência de Vulto / Histórico dos Fatos
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Relato detalhado registrado pelo operador ou informante na planilha
+                        </span>
+                      </div>
+                    </div>
+                    {/* Botão Copiar */}
+                    {(modalOcorrencia.dinamica || modalOcorrencia.historico) && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopyDinamica(modalOcorrencia.dinamica || modalOcorrencia.historico || '')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-white border border-slate-300 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 text-slate-700 shadow-2xs cursor-pointer transition-all self-start sm:self-auto shrink-0"
+                        title="Copiar texto da dinâmica para a área de transferência"
+                      >
+                        {copiedDinamica ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 font-bold">Copiado com sucesso!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Copiar Histórico</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <p className="text-slate-800 text-xs leading-relaxed whitespace-pre-wrap break-words font-medium">
+                  <div className="bg-white p-4 rounded-lg border border-slate-200 border-l-4 border-l-blue-600 shadow-2xs">
+                    <p className="text-slate-800 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words font-medium select-text">
                       {modalOcorrencia.dinamica || modalOcorrencia.historico || 'Sem relato da dinâmica registrado na planilha.'}
                     </p>
                   </div>

@@ -22,6 +22,8 @@ import {
   BarChart3,
   Table,
   Filter,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { FaltaEfetivo } from '../types';
 import { exportFaltasPdf, matchesCarimboDate, computeFaltasPorDia } from '../services/pdfService';
@@ -117,6 +119,40 @@ export function countPoliciaisInText(text: string | undefined | null): number {
   return items.length;
 }
 
+// Formata todos os campos da ficha de faltas para cópia limpa e profissional
+export function formatFaltaFicha(f: FaltaEfetivo): string {
+  const cpa = normalizeCpaName(f.comandoIntermediario || f.cpa || '') || 'Não informado';
+  const opm = f.opm || f.uopDestino || f.opmOrigem || 'Não informada';
+  const servico = f.servicoDia || f.turno || 'Serviço POE Eleições';
+  const informantePosto = f.posto || f.postoGrad || 'Policial Militar';
+  const informanteNome = f.nomeGuerra ? `${informantePosto} ${f.nomeGuerra}` : informantePosto;
+  const informanteRg = f.rg ? ` (RG PM: ${f.rg})` : '';
+  const faltasTexto = (f.faltasPoe || f.motivo || '').trim();
+  const qtdFaltas = countPoliciaisInText(faltasTexto);
+  const dispensasTexto = (f.dispensasPoe || '').trim();
+
+  const lines = [
+    '=== FICHA DE ENVIO DE FALTAS NO POE ===',
+    `Carimbo Data/Hora: ${f.carimbo || f.data || '-'}`,
+    `Comando Intermediário: ${cpa}`,
+    `OPM: ${opm}`,
+    `Serviço / Turno: ${servico}`,
+    `Informante: ${informanteNome}${informanteRg}`,
+    `Quantitativo de Faltas: ${qtdFaltas} falta(s)`,
+    '',
+    '--- RELAÇÃO DE POLICIAIS FALTOSOS (POE) ---',
+    faltasTexto && !isSemAlteracaoFalta(faltasTexto) ? faltasTexto : 'Sem alteração / Nenhuma falta registrada',
+  ];
+
+  if (dispensasTexto && !isSemAlteracaoFalta(dispensasTexto)) {
+    lines.push('');
+    lines.push('--- DISPENSAS REGISTRADAS NO POE ---');
+    lines.push(dispensasTexto);
+  }
+
+  return lines.join('\n');
+}
+
 export const FaltasTab: React.FC<FaltasTabProps> = ({
   faltas,
   lastSyncTime,
@@ -135,6 +171,16 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalFalta, setModalFalta] = useState<FaltaEfetivo | null>(null);
+
+  // Estado de feedback de cópia da ficha completa
+  const [copiedFicha, setCopiedFicha] = useState<boolean>(false);
+
+  const handleCopyFicha = (f: FaltaEfetivo) => {
+    const text = formatFaltaFicha(f);
+    navigator.clipboard.writeText(text);
+    setCopiedFicha(true);
+    setTimeout(() => setCopiedFicha(false), 2000);
+  };
 
   // Consolidação detalhada de Faltas por Dia de Evento (Carimbo de Data e Hora do Formulário)
   const statsDias = useMemo(() => {
@@ -1039,7 +1085,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
                         <button
                           onClick={() => setModalFalta(f)}
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-colors cursor-pointer"
-                          title="Ver ficha completa com todos os campos deste envio"
+                          title="Ver ficha completa deste envio"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>Ficha</span>
@@ -1104,6 +1150,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
               <button
                 onClick={() => setModalFalta(null)}
                 className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Fechar"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1174,7 +1221,26 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
             </div>
 
             {/* Rodapé do Modal */}
-            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => handleCopyFicha(modalFalta)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-white border border-slate-300 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 text-slate-700 shadow-2xs cursor-pointer transition-all"
+                title="Copiar todos os dados desta ficha formatados para envio ou relatório"
+              >
+                {copiedFicha ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700 font-bold">Ficha copiada com sucesso!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copiar Toda a Ficha</span>
+                  </>
+                )}
+              </button>
+
               <button
                 onClick={() => setModalFalta(null)}
                 className="px-4 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"

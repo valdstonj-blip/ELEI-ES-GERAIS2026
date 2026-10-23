@@ -1032,9 +1032,9 @@ export function exportOcorrenciasPdf(
     // 5. Prisões / Apreensões
     if (o.prisoesApreensoes && !isNaoHouve(o.prisoesApreensoes)) {
       teveCrimeCategorizado = true;
-      const key = `Prisões/apreensões no entorno e/ou locais:::${o.prisoesApreensoes.trim()}`;
+      const key = `Ocorrências com Notificação de Prisões/Apreensões:::${o.prisoesApreensoes.trim()}`;
       const item = crimeCountsMap.get(key) || {
-        categoria: 'Prisões/apreensões no entorno e/ou locais',
+        categoria: 'Ocorrências com Notificação de Prisões/Apreensões',
         crime: o.prisoesApreensoes.trim(),
         count: 0,
       };
@@ -1081,7 +1081,7 @@ export function exportOcorrenciasPdf(
     'Crimes comuns nos locais de votação/apuração',
     'Crimes Eleitorais',
     'Ocorrências e Incidentes de Segurança Pública',
-    'Prisões/apreensões no entorno e/ou locais',
+    'Ocorrências com Notificação de Prisões/Apreensões',
     'Crimes Registrados no Pleito',
   ];
 
@@ -1092,8 +1092,8 @@ export function exportOcorrenciasPdf(
     let catKey = item.categoria;
     if (catKey.includes('Incidentes') || catKey.includes('Segurança Pública')) {
       catKey = 'Ocorrências e Incidentes de Segurança Pública';
-    } else if (catKey.includes('Prisões') || catKey.includes('Apreensões')) {
-      catKey = 'Prisões/apreensões no entorno e/ou locais';
+    } else if (catKey.includes('Prisões') || catKey.includes('Apreensões') || catKey.includes('Prisão')) {
+      catKey = 'Ocorrências com Notificação de Prisões/Apreensões';
     }
     const arr = crimesPorCategoria.get(catKey) || [];
     arr.push(item);
@@ -1134,7 +1134,7 @@ export function exportOcorrenciasPdf(
         },
       },
       {
-        content: `Subtotal: ${subtotal}`,
+        content: `Subtotal: ${subtotal} ocorrência(s)`,
         styles: {
           fillColor: [241, 245, 249],
           textColor: [185, 28, 28],
@@ -1144,7 +1144,7 @@ export function exportOcorrenciasPdf(
         },
       },
       {
-        content: subtotalPct,
+        content: `${subtotalPct} (${subtotal}/${totalFatosReportados})`,
         styles: {
           fillColor: [241, 245, 249],
           textColor: [71, 85, 105],
@@ -1163,8 +1163,8 @@ export function exportOcorrenciasPdf(
           : '-';
       summaryRows.push([
         `    • ${c.crime}`,
-        c.count.toString(),
-        pct,
+        `${c.count} ocorr.`,
+        `${pct} (${c.count}/${totalFatosReportados})`,
       ]);
     });
   });
@@ -1187,7 +1187,7 @@ export function exportOcorrenciasPdf(
         },
       },
       {
-        content: `Subtotal: ${countSemCrimeComDinamica}`,
+        content: `Subtotal: ${countSemCrimeComDinamica} ocorrência(s)`,
         styles: {
           fillColor: [254, 243, 199],
           textColor: [146, 64, 14],
@@ -1197,7 +1197,7 @@ export function exportOcorrenciasPdf(
         },
       },
       {
-        content: pct,
+        content: `${pct} (${countSemCrimeComDinamica}/${totalFatosReportados})`,
         styles: {
           fillColor: [254, 243, 199],
           textColor: [146, 64, 14],
@@ -1210,8 +1210,8 @@ export function exportOcorrenciasPdf(
 
     summaryRows.push([
       '    • Registros com dinâmica/fato narrado (sem seleção de crime categorizado)',
-      countSemCrimeComDinamica.toString(),
-      pct,
+      `${countSemCrimeComDinamica} ocorr.`,
+      `${pct} (${countSemCrimeComDinamica}/${totalFatosReportados})`,
     ]);
   }
 
@@ -1225,8 +1225,8 @@ export function exportOcorrenciasPdf(
 
   const summaryFoot = [
     [
-      'TOTAL GERAL DE FATOS E OCORRÊNCIAS REGISTRADAS',
-      totalFatosReportados.toString(),
+      'TOTAL GERAL DE OCORRÊNCIAS REGISTRADAS NO PLEITO',
+      `${totalFatosReportados} ocorrência(s)`,
       '100.0%',
     ],
   ];
@@ -1243,9 +1243,9 @@ export function exportOcorrenciasPdf(
     startY: 23,
     head: [
       [
-        'Tipificação do Fato / Crime Registrado no Pleito (Planilha)',
-        'Quantidade',
-        '% do Total',
+        'Natureza do Fato / Tipificação Registrada pelas OPMs',
+        'Ocorrências Notificadas',
+        '% das Ocorrências (Proporção)*',
       ],
     ],
     body: summaryRows,
@@ -1280,7 +1280,17 @@ export function exportOcorrenciasPdf(
   });
 
   const summaryFinalY = (doc as any).lastAutoTable?.finalY || 60;
-  let analyticalStartY = summaryFinalY + 7;
+
+  // NOTA METODOLÓGICA TÉCNICA OFICIAL ABAIXO DA TABELA 1
+  doc.setFontSize(6.3);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(100, 116, 139); // slate-500
+  const notaMetodologica =
+    '* NOTA METODOLÓGICA / TÉCNICA: Os quantitativos referem-se ao número de ocorrências e registros informados pelas OPMs via formulário de ocorrência. O quantitativo exato de indivíduos conduzidos/custodiados caso existam, constam no histórico (Dinâmica do Fato) de cada registro na tabela.';
+  const splitNota = doc.splitTextToSize(notaMetodologica, 277);
+  doc.text(splitNota, 10, summaryFinalY + 3.8);
+
+  let analyticalStartY = summaryFinalY + 4 + splitNota.length * 2.8 + 4;
 
   // Se a tabela analítica for ficar muito espremida na primeira página, abre página nova
   if (analyticalStartY > 160) {

@@ -26,6 +26,7 @@ import { LocaisTab } from './components/LocaisTab';
 import { OcorrenciasTab } from './components/OcorrenciasTab';
 import { FaltasTab, countPoliciaisInText } from './components/FaltasTab';
 import { VerificacaoTab } from './components/VerificacaoTab';
+import { DashboardEleicoesTab } from './components/DashboardEleicoesTab';
 import { SheetConnectionModal } from './components/SheetConnectionModal';
 import { runFaltasAudit } from './services/faltasAuditService';
 
@@ -460,6 +461,8 @@ export default function App() {
             isAdmin={isAdmin}
           />
         )}
+
+        {activeTab === 'dashboard' && <DashboardEleicoesTab />}
       </main>
 
       {/* Rodapé Oficial da Seção de Planejamento */}

@@ -2,7 +2,7 @@ import React from 'react';
 
 // Versão registrada do sistema — alterada manualmente conforme solicitação
 export const SYSTEM_RELEASE = {
-  version: '2.5',
+  version: '3.0',
 };
 
 export const Footer: React.FC = () => {

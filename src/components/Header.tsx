@@ -7,6 +7,7 @@ import {
   RefreshCw,
   FileCheck2,
   Link2,
+  BarChart3,
 } from 'lucide-react';
 import { ActiveTab } from '../types';
 
@@ -118,10 +119,10 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* 2. LINHA DEDICADA DE NAVEGAÇÃO: TODAS AS 4 ABAS COM ESPAÇO E VISIBILIDADE TOTAL */}
+      {/* 2. LINHA DEDICADA DE NAVEGAÇÃO: TODAS AS ABAS COM VISIBILIDADE TOTAL (DESKTOP E MOBILE) */}
       <div className="bg-slate-950/70 border-t border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-1.5">
-          <nav className="flex items-center gap-2 overflow-x-auto py-0.5 w-full scrollbar-thin">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-1">
+          <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-0.5 px-0.5 w-full scrollbar-none touch-pan-x">
             <button
               onClick={() => setActiveTab('locais')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
@@ -209,6 +210,28 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </button>
             )}
+
+            {/* Nova Aba Oficial: DASHBOARD DAS ELEIÇÕES 2026 (Google Looker Studio) */}
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                activeTab === 'dashboard'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+              <span>DASHBOARD ELEIÇÕES 2026</span>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  activeTab === 'dashboard'
+                    ? 'bg-blue-700/80 text-white'
+                    : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                }`}
+              >
+                BI
+              </span>
+            </button>
           </nav>
         </div>
       </div>

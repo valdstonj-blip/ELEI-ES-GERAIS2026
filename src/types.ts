@@ -135,4 +135,4 @@ export interface SheetConfig {
   lastUpdated?: string | null;
 }
 
-export type ActiveTab = 'locais' | 'ocorrencias' | 'faltas' | 'verificacao';
+export type ActiveTab = 'locais' | 'ocorrencias' | 'faltas' | 'verificacao' | 'dashboard';
