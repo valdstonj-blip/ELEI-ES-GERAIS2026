@@ -539,7 +539,7 @@ export const LocaisTab: React.FC<LocaisTabProps> = ({
             </div>
 
             <p className="text-[10px] text-slate-500 leading-tight">
-              Locais com necessidade no domingo (áreas sensíveis e segurança na madrugada).
+              Locais com necessidade de implantar domingo.
             </p>
 
             <div className="grid grid-cols-2 gap-1.5">
