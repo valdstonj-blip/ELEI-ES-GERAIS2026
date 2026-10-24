@@ -1073,7 +1073,7 @@ export function exportOcorrenciasPdf(
   );
 
   const totalCrimesCategorizados = crimesQuantificados.reduce((sum, item) => sum + item.count, 0);
-  const totalFatosReportados = totalCrimesCategorizados + countSemCrimeComDinamica;
+  const totalFatosReportados = totalCrimesCategorizados;
 
   // Definir ordem oficial das categorias
   const ORDEM_CATEGORIAS = [
@@ -1169,55 +1169,9 @@ export function exportOcorrenciasPdf(
     });
   });
 
-  // 3. Grupo de Ocorrências com Dinâmica narrada mas sem crime categorizado
-  if (countSemCrimeComDinamica > 0) {
-    const pct =
-      totalFatosReportados > 0
-        ? ((countSemCrimeComDinamica / totalFatosReportados) * 100).toFixed(1) + '%'
-        : '-';
-
-    summaryRows.push([
-      {
-        content: '▶ OCORRÊNCIAS SEM CRIME TIPIFICADO (APENAS DINÂMICA DO FATO)',
-        styles: {
-          fillColor: [254, 243, 199], // amber 100
-          textColor: [146, 64, 14], // amber 800
-          fontStyle: 'bold',
-          fontSize: 7.2,
-        },
-      },
-      {
-        content: `Subtotal: ${countSemCrimeComDinamica} ocorrência(s)`,
-        styles: {
-          fillColor: [254, 243, 199],
-          textColor: [146, 64, 14],
-          fontStyle: 'bold',
-          halign: 'center',
-          fontSize: 7.2,
-        },
-      },
-      {
-        content: `${pct} (${countSemCrimeComDinamica}/${totalFatosReportados})`,
-        styles: {
-          fillColor: [254, 243, 199],
-          textColor: [146, 64, 14],
-          fontStyle: 'bold',
-          halign: 'center',
-          fontSize: 7.2,
-        },
-      },
-    ]);
-
-    summaryRows.push([
-      '    • Registros com dinâmica/fato narrado (sem seleção de crime categorizado)',
-      `${countSemCrimeComDinamica} ocorr.`,
-      `${pct} (${countSemCrimeComDinamica}/${totalFatosReportados})`,
-    ]);
-  }
-
   if (summaryRows.length === 0) {
     summaryRows.push([
-      'Sem Alterações registradas para os filtros selecionados',
+      'Nenhuma ocorrência com crime tipificado registrada para os filtros selecionados',
       '0',
       '0.0%',
     ]);
@@ -1225,9 +1179,9 @@ export function exportOcorrenciasPdf(
 
   const summaryFoot = [
     [
-      'TOTAL GERAL DE OCORRÊNCIAS REGISTRADAS NO PLEITO',
+      'TOTAL DE CRIMES E OCORRÊNCIAS TIPIFICADAS NO PLEITO',
       `${totalFatosReportados} ocorrência(s)`,
-      '100.0%',
+      totalFatosReportados > 0 ? '100.0%' : '0.0%',
     ],
   ];
 
