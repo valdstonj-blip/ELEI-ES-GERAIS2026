@@ -32,7 +32,7 @@ const DEFAULT_CONFIG = {
   ocorrenciasUrl: OFFICIAL_OCORRENCIAS_URL,
   faltasUrl: OFFICIAL_FALTAS_URL,
   verificacaoUrl: OFFICIAL_FALTAS_URL,
-  controleUrl: '',
+  controleUrl: 'https://docs.google.com/spreadsheets/d/1mFNqir2Y3Dwxt2WKQDMhCgfp2CgS1pFGfR_o5cwpw_w/edit?gid=0#gid=0',
   controleStatus: 'LIBERADO',
   updatedAt: new Date().toISOString(),
 };

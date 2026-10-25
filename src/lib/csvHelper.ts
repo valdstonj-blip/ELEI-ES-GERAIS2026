@@ -21,13 +21,15 @@ export const DEFAULT_FALTAS_URL =
   'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
 export const DEFAULT_VERIFICACAO_URL =
   'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
+export const DEFAULT_CONTROLE_URL =
+  'https://docs.google.com/spreadsheets/d/1mFNqir2Y3Dwxt2WKQDMhCgfp2CgS1pFGfR_o5cwpw_w/edit?gid=0#gid=0';
 
 export const SHEET_URLS = {
   PLANILHA_1_LOCAIS: DEFAULT_SHEET_URL,
   PLANILHA_2_OCORRENCIAS: DEFAULT_OCORRENCIAS_URL,
   PLANILHA_3_FALTAS: DEFAULT_FALTAS_URL,
   PLANILHA_4_VERIFICACAO: DEFAULT_VERIFICACAO_URL,
-  PLANILHA_5_CONTROLE: '',
+  PLANILHA_5_CONTROLE: DEFAULT_CONTROLE_URL,
 };
 
 export function parseControleStatus(text: string): 'LIBERADO' | 'BLOQUEADO' {
@@ -636,7 +638,7 @@ export const CsvHelper = {
     if (SHEET_URLS.PLANILHA_5_CONTROLE && SHEET_URLS.PLANILHA_5_CONTROLE.trim().startsWith('http')) {
       return SHEET_URLS.PLANILHA_5_CONTROLE.trim();
     }
-    return '';
+    return DEFAULT_CONTROLE_URL;
   },
 
   setControleSheetUrl(url: string, pushToServer = true) {
