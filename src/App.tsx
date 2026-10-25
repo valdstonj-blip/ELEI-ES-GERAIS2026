@@ -66,9 +66,11 @@ export default function App() {
         const isAuth = localStorage.getItem('eleicoes2026_auth') === 'true';
         if (res.status === 'BLOQUEADO' && isAuth && currentRole === 'pm3') {
           localStorage.removeItem('eleicoes2026_auth');
+          localStorage.removeItem('eleicoes2026_role');
           setIsAuthenticated(false);
+          setUserRole('');
           setKickoutNotice(
-            'SUA SESSÃO FOI FINALIZADA: O acesso para usuários visitantes foi encerrado pela coordenação geral do evento.'
+            'ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi bloqueado pela coordenação do evento.'
           );
         }
       } catch (e) {
@@ -79,8 +81,8 @@ export default function App() {
     // Executa verificação inicial imediata
     checkAccess();
 
-    // Polling a cada 15 segundos
-    const interval = setInterval(checkAccess, 15000);
+    // Polling rápido a cada 5 segundos para garantir bloqueio quase em tempo real
+    const interval = setInterval(checkAccess, 5000);
 
     // E também ao voltar o foco para a janela do navegador
     const handleFocus = () => {

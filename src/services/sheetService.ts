@@ -1027,7 +1027,7 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
   let hadLoginRedirect = false;
 
   const isValidCsv = (text: string) => {
-    if (!text || text.trim().length < 20) return false;
+    if (!text || text.trim().length < 3) return false;
     const lower = text.toLowerCase().trim();
     if (
       lower.includes('accounts.google.com') ||
@@ -1042,7 +1042,15 @@ export async function fetchCsvWithTimeout(url: string, timeoutMs = 12000): Promi
     if (lower.startsWith('<!doctype') || lower.startsWith('<html') || lower.includes('page not found')) {
       return false;
     }
-    return text.includes(',') || text.includes(';') || text.includes('\t') || text.includes('\n');
+    return (
+      text.includes(',') ||
+      text.includes(';') ||
+      text.includes('\t') ||
+      text.includes('\n') ||
+      text.includes('"') ||
+      lower.includes('liberado') ||
+      lower.includes('bloqueado')
+    );
   };
 
   for (const candidate of candidates) {

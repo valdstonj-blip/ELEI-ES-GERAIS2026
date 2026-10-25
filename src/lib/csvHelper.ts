@@ -696,13 +696,15 @@ export const CsvHelper = {
   }> {
     const targetUrl = customUrl !== undefined ? customUrl.trim() : this.getControleSheetUrl();
 
-    // 1. Se tiver URL da planilha Google, busca diretamente
+    // 1. Se tiver URL da planilha Google, busca diretamente em tempo real
     if (targetUrl && targetUrl.startsWith('http')) {
       try {
         const text = await fetchGoogleSheetCsv(targetUrl);
-        if (text && text.length > 0) {
+        if (text && text.trim().length > 0) {
           const status = parseControleStatus(text);
-          await this.setControleStatus(status, true);
+          try {
+            localStorage.setItem(STORAGE_KEYS.CONTROLE_STATUS, status);
+          } catch {}
           return {
             status,
             source: 'planilha_google',
@@ -714,7 +716,7 @@ export const CsvHelper = {
       }
     }
 
-    // 2. Consulta o backend do servidor (persistência centralizada em sheet-config.json)
+    // 2. Consulta o backend do servidor (quando executando com servidor local)
     try {
       const res = await fetch('/api/controle-acesso');
       if (res.ok) {
@@ -734,21 +736,7 @@ export const CsvHelper = {
       }
     } catch (e) {}
 
-    // 3. Fallback no arquivo local do asset disponibilizado pelo usuário
-    try {
-      const localAsset = await fetch('/assets/aistudio/CONTROLE_ACESSO_c0b3a704');
-      if (localAsset.ok) {
-        const text = await localAsset.text();
-        const status = parseControleStatus(text);
-        return {
-          status,
-          source: 'arquivo_local',
-          rawText: text.trim(),
-        };
-      }
-    } catch {}
-
-    // 4. Último fallback: valor salvo em localStorage
+    // 3. Fallback no valor salvo no navegador
     return {
       status: this.getControleStatus(),
       source: 'local_storage',

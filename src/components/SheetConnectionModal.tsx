@@ -92,7 +92,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
     setIsTogglingControle(false);
     setControleNotice(
       nextStatus === 'BLOQUEADO'
-        ? 'ACESSO BLOQUEADO! O usuário visitante (pm3) foi bloqueado e será desconectado se estiver aberto em algum computador.'
+        ? 'ACESSO BLOQUEADO! O status foi marcado como BLOQUEADO. Para desconectar o visitante em outro computador no Vercel, certifique-se de alterar também a célula A2 da Planilha Google para BLOQUEADO.'
         : 'ACESSO LIBERADO! Visitantes podem acessar o painel normalmente.'
     );
   };
@@ -104,13 +104,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
       const res = await CsvHelper.checkLiveControleStatus(controleUrl);
       setControleStatus(res.status);
       setControleNotice(
-        `Planilha lida com sucesso! Status detectado: [${res.status}]. (${
-          res.source === 'planilha_google'
-            ? 'Planilha Google Sheets conectada'
-            : res.source === 'arquivo_local'
-            ? 'Arquivo de Controle Local'
-            : 'Servidor Central'
-        })`
+        `Planilha Google lida com sucesso! Status detectado na célula: [${res.status}]. Acesso dos visitantes: [${res.status}].`
       );
     } catch (err: any) {
       setControleNotice(`Erro ao ler status: ${err?.message || 'Falha na conexão'}`);
@@ -653,9 +647,20 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
 
             {/* Google Sheet URL para Controle Automático */}
             <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-bold text-slate-700 block">
-                Link da Planilha Google "CONTROLE ACESSO" (Coluna A: LIBERADO / BLOQUEADO):
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  Link da Planilha Google "CONTROLE ACESSO" (Coluna A: LIBERADO / BLOQUEADO):
+                </label>
+                <a
+                  href={controleUrl.trim() || 'https://docs.google.com/spreadsheets/d/1mFNqir2Y3Dwxt2WKQDMhCgfp2CgS1pFGfR_o5cwpw_w/edit'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Abrir Planilha no Google</span>
+                </a>
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -674,9 +679,20 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
                   <span>Testar / Ler Planilha</span>
                 </button>
               </div>
-              <p className="text-[10px] text-slate-500">
-                Se configurada, a planilha atualiza o status automaticamente via coluna A. Você também pode clicar no botão acima a qualquer momento para bloquear/liberar imediatamente.
-              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-[11px] text-blue-900 space-y-1">
+                <p className="font-bold">
+                  ⚡ Desconexão Remota em Tempo Real (Vercel / Celular / Computador):
+                </p>
+                <p>
+                  1. O computador do visitante e o seu celular comunicam-se via Planilha Google.
+                </p>
+                <p>
+                  2. Para desconectar o visitante de qualquer computador: abra a planilha e mude a célula <strong>A2</strong> para <strong>BLOQUEADO</strong>.
+                </p>
+                <p>
+                  3. O sistema do visitante verifica a cada <strong>5 segundos</strong>, fecha a tela dele na hora e bloqueia novas tentativas de login.
+                </p>
+              </div>
             </div>
 
             {controleNotice && (
