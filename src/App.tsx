@@ -70,7 +70,7 @@ export default function App() {
           setIsAuthenticated(false);
           setUserRole('');
           setKickoutNotice(
-            'ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi bloqueado pela coordenação do evento.'
+            'ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi interrompido!'
           );
         }
       } catch (e) {

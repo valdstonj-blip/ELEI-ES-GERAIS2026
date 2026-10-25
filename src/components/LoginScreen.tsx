@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Lock, User } from 'lucide-react';
 import { CsvHelper } from '../lib/csvHelper';
 
 interface LoginScreenProps {
@@ -30,13 +30,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, notice
       try {
         const liveCheck = await CsvHelper.checkLiveControleStatus();
         if (liveCheck.status === 'BLOQUEADO') {
-          setError('ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi bloqueado pela coordenação do evento.');
+          setError('ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi interrompido!');
           setLoading(false);
           return;
         }
       } catch {
         if (CsvHelper.getControleStatus() === 'BLOQUEADO') {
-          setError('ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi bloqueado pela coordenação do evento.');
+          setError('ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi interrompido!');
           setLoading(false);
           return;
         }
@@ -68,16 +68,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, notice
         </div>
 
         {notice && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
-            <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-            <span className="font-semibold">{notice}</span>
+          <div className="mb-4 p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-center text-xs text-amber-900 shadow-2xs font-semibold leading-relaxed">
+            {notice}
           </div>
         )}
 
         {error && (
-          <div className="mb-4 p-2.5 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-xs text-red-700">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-            <span>{error}</span>
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-center text-xs text-red-700 font-semibold leading-relaxed">
+            {error}
           </div>
         )}
 
