@@ -1,39 +1,54 @@
 import React, { useState } from 'react';
-import { Lock, User, AlertCircle } from 'lucide-react';
+import { Lock, User, AlertCircle, ShieldAlert } from 'lucide-react';
+import { CsvHelper } from '../lib/csvHelper';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
+  notice?: string | null;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, notice }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    setTimeout(() => {
-      const u = username.trim().toLowerCase();
-      // Credenciais acordadas:
-      // - admin / 74029jr: Acesso total (visualiza e gerencia os links das planilhas, verificação de faltas)
-      // - pm3 / pm3: Acesso operacional (visualiza dados, mas links de planilhas e verificação ficam 100% ocultos)
-      if (u === 'admin' && (password === '74029jr' || password.trim() === '74029jr')) {
-        localStorage.setItem('eleicoes2026_auth', 'true');
-        localStorage.setItem('eleicoes2026_role', 'admin');
-        onLoginSuccess();
-      } else if (u === 'pm3' && password === 'pm3') {
-        localStorage.setItem('eleicoes2026_auth', 'true');
-        localStorage.setItem('eleicoes2026_role', 'pm3');
-        onLoginSuccess();
-      } else {
-        setError('Usuário ou senha incorretos.');
-        setLoading(false);
+    const u = username.trim().toLowerCase();
+    // Credenciais acordadas:
+    // - admin / 74029jr: Acesso total irrestrito (visualiza e gerencia os links das planilhas, verificação e controle de acesso)
+    // - pm3 / pm3: Acesso operacional (sujeito ao controle remoto de acesso)
+    if (u === 'admin' && (password === '74029jr' || password.trim() === '74029jr')) {
+      localStorage.setItem('eleicoes2026_auth', 'true');
+      localStorage.setItem('eleicoes2026_role', 'admin');
+      onLoginSuccess();
+    } else if (u === 'pm3' && password === 'pm3') {
+      try {
+        const liveCheck = await CsvHelper.checkLiveControleStatus();
+        if (liveCheck.status === 'BLOQUEADO') {
+          setError('ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi bloqueado pela coordenação do evento.');
+          setLoading(false);
+          return;
+        }
+      } catch {
+        if (CsvHelper.getControleStatus() === 'BLOQUEADO') {
+          setError('ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi bloqueado pela coordenação do evento.');
+          setLoading(false);
+          return;
+        }
       }
-    }, 300);
+
+      localStorage.setItem('eleicoes2026_auth', 'true');
+      localStorage.setItem('eleicoes2026_role', 'pm3');
+      onLoginSuccess();
+    } else {
+      setError('Usuário ou senha incorretos.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -51,6 +66,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             Painel PM/3 de Acompanhamento
           </h1>
         </div>
+
+        {notice && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
+            <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+            <span className="font-semibold">{notice}</span>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-2.5 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-xs text-red-700">

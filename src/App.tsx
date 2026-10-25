@@ -47,6 +47,54 @@ export default function App() {
   });
   const isAdmin = userRole === 'admin';
 
+  // Controle de Acesso Remoto de Visitantes (Kill-Switch PM/3)
+  const [controleStatus, setControleStatus] = useState<'LIBERADO' | 'BLOQUEADO'>(() => CsvHelper.getControleStatus());
+  const [kickoutNotice, setKickoutNotice] = useState<string | null>(null);
+
+  // Verificação contínua do Controle Remoto de Acesso (Kill-Switch PM/3)
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkAccess = async () => {
+      try {
+        const res = await CsvHelper.checkLiveControleStatus();
+        if (!isMounted) return;
+        setControleStatus(res.status);
+
+        // Se o status for BLOQUEADO e o usuário for visitante (pm3), desconecta imediatamente
+        const currentRole = localStorage.getItem('eleicoes2026_role');
+        const isAuth = localStorage.getItem('eleicoes2026_auth') === 'true';
+        if (res.status === 'BLOQUEADO' && isAuth && currentRole === 'pm3') {
+          localStorage.removeItem('eleicoes2026_auth');
+          setIsAuthenticated(false);
+          setKickoutNotice(
+            'SUA SESSÃO FOI FINALIZADA: O acesso para usuários visitantes foi encerrado pela coordenação geral do evento.'
+          );
+        }
+      } catch (e) {
+        // Silencioso em caso de oscilação momentânea
+      }
+    };
+
+    // Executa verificação inicial imediata
+    checkAccess();
+
+    // Polling a cada 15 segundos
+    const interval = setInterval(checkAccess, 15000);
+
+    // E também ao voltar o foco para a janela do navegador
+    const handleFocus = () => {
+      checkAccess();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   // Aba ativa de navegação direta no topo
   const [activeTab, setActiveTab] = useState<ActiveTab>('locais');
 
@@ -308,12 +356,15 @@ export default function App() {
     localStorage.removeItem('eleicoes2026_role');
     setIsAuthenticated(false);
     setUserRole('admin');
+    setKickoutNotice(null);
   };
 
   if (!isAuthenticated) {
     return (
       <LoginScreen
+        notice={kickoutNotice}
         onLoginSuccess={() => {
+          setKickoutNotice(null);
           setIsAuthenticated(true);
           const role = localStorage.getItem('eleicoes2026_role') || 'admin';
           setUserRole(role);
@@ -361,6 +412,7 @@ export default function App() {
             onOpenSettings={isAdmin ? () => setIsConnectionModalOpen(true) : undefined}
             isAdmin={isAdmin}
             userRole={userRole}
+            controleStatus={controleStatus}
             counts={{
               locais: locais.length,
               ocorrencias: countOcorrencias2oTurno,
@@ -377,7 +429,10 @@ export default function App() {
       {isAdmin && (
         <SheetConnectionModal
           isOpen={isConnectionModalOpen}
-          onClose={() => setIsConnectionModalOpen(false)}
+          onClose={() => {
+            setIsConnectionModalOpen(false);
+            setControleStatus(CsvHelper.getControleStatus());
+          }}
           onLocaisUpdated={(data) => {
             setLocais(data);
             showToast(`${data.length.toLocaleString('pt-BR')} locais de votação atualizados com sucesso!`, 'success');

@@ -32,6 +32,8 @@ const DEFAULT_CONFIG = {
   ocorrenciasUrl: OFFICIAL_OCORRENCIAS_URL,
   faltasUrl: OFFICIAL_FALTAS_URL,
   verificacaoUrl: OFFICIAL_FALTAS_URL,
+  controleUrl: '',
+  controleStatus: 'LIBERADO',
   updatedAt: new Date().toISOString(),
 };
 
@@ -53,6 +55,8 @@ function readConfig() {
         ocorrenciasUrl: parsed.ocorrenciasUrl || OFFICIAL_OCORRENCIAS_URL,
         faltasUrl: parsed.faltasUrl || OFFICIAL_FALTAS_URL,
         verificacaoUrl: parsed.verificacaoUrl || OFFICIAL_FALTAS_URL,
+        controleUrl: parsed.controleUrl || '',
+        controleStatus: parsed.controleStatus || 'LIBERADO',
       };
     }
   } catch (err) {
@@ -361,7 +365,7 @@ app.get('/api/sheet-config', (_req, res) => {
 
 app.post('/api/sheet-config', (req, res) => {
   const current = readConfig();
-  const { locaisUrl, ocorrenciasUrl, faltasUrl, verificacaoUrl } = req.body || {};
+  const { locaisUrl, ocorrenciasUrl, faltasUrl, verificacaoUrl, controleUrl, controleStatus } = req.body || {};
 
   const updated = {
     ...current,
@@ -369,6 +373,8 @@ app.post('/api/sheet-config', (req, res) => {
     ocorrenciasUrl: typeof ocorrenciasUrl === 'string' ? ocorrenciasUrl.trim() : current.ocorrenciasUrl,
     faltasUrl: typeof faltasUrl === 'string' ? faltasUrl.trim() : current.faltasUrl,
     verificacaoUrl: typeof verificacaoUrl === 'string' ? verificacaoUrl.trim() : current.verificacaoUrl,
+    controleUrl: typeof controleUrl === 'string' ? controleUrl.trim() : current.controleUrl,
+    controleStatus: controleStatus === 'BLOQUEADO' ? 'BLOQUEADO' : (controleStatus === 'LIBERADO' ? 'LIBERADO' : current.controleStatus),
     updatedAt: new Date().toISOString(),
   };
 
@@ -385,6 +391,31 @@ app.post('/api/sheet-config', (req, res) => {
   } else {
     res.status(500).json({ success: false, message: 'Falha ao salvar configuração no servidor.' });
   }
+});
+
+// 1.1 Controle de Acesso Remoto (Kill-Switch para Visitantes)
+app.get('/api/controle-acesso', (_req, res) => {
+  const cfg = readConfig();
+  res.json({
+    success: true,
+    status: cfg.controleStatus || 'LIBERADO',
+    controleUrl: cfg.controleUrl || '',
+    updatedAt: cfg.updatedAt,
+  });
+});
+
+app.post('/api/controle-acesso', (req, res) => {
+  const { status, controleUrl } = req.body || {};
+  const current = readConfig();
+  const updated = {
+    ...current,
+    controleStatus: status === 'BLOQUEADO' ? 'BLOQUEADO' : (status === 'LIBERADO' ? 'LIBERADO' : current.controleStatus),
+    controleUrl: typeof controleUrl === 'string' ? controleUrl.trim() : current.controleUrl,
+    updatedAt: new Date().toISOString(),
+  };
+  writeConfig(updated);
+  console.log('[EMG-PM/3] Controle de acesso atualizado:', updated.controleStatus, updated.controleUrl ? `(URL: ${updated.controleUrl})` : '');
+  res.json({ success: true, config: updated });
 });
 
 // 2. Persistência de Locais de Votação

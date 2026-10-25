@@ -27,7 +27,23 @@ export const SHEET_URLS = {
   PLANILHA_2_OCORRENCIAS: DEFAULT_OCORRENCIAS_URL,
   PLANILHA_3_FALTAS: DEFAULT_FALTAS_URL,
   PLANILHA_4_VERIFICACAO: DEFAULT_VERIFICACAO_URL,
+  PLANILHA_5_CONTROLE: '',
 };
+
+export function parseControleStatus(text: string): 'LIBERADO' | 'BLOQUEADO' {
+  if (!text) return 'LIBERADO';
+  const clean = text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (
+    clean.includes('BLOQUEADO') ||
+    clean.includes('BLOQUEAR') ||
+    clean.includes('FECHADO') ||
+    clean.includes('SUSPENSO') ||
+    clean.includes('DESATIVADO')
+  ) {
+    return 'BLOQUEADO';
+  }
+  return 'LIBERADO';
+}
 
 const STORAGE_KEYS = {
   LOCAIS: 'eleicoes2026_csv_locais_v9_2turno',
@@ -39,6 +55,8 @@ const STORAGE_KEYS = {
   OCORRENCIAS_URL: 'eleicoes2026_custom_ocorrencias_url_v9',
   FALTAS_URL: 'eleicoes2026_custom_faltas_url_v9',
   VERIFICACAO_URL: 'eleicoes2026_custom_verificacao_url_v9',
+  CONTROLE_URL: 'eleicoes2026_custom_controle_url_v1',
+  CONTROLE_STATUS: 'eleicoes2026_controle_status_v1',
 };
 
 // Chaves antigas do 1º Turno a serem purgadas definitivamente do navegador
@@ -74,7 +92,14 @@ try {
   });
 } catch {}
 
-function pushConfigToServer(partial: { locaisUrl?: string; ocorrenciasUrl?: string; faltasUrl?: string; verificacaoUrl?: string }) {
+function pushConfigToServer(partial: {
+  locaisUrl?: string;
+  ocorrenciasUrl?: string;
+  faltasUrl?: string;
+  verificacaoUrl?: string;
+  controleUrl?: string;
+  controleStatus?: string;
+}) {
   try {
     fetch('/api/sheet-config', {
       method: 'POST',
@@ -86,17 +111,27 @@ function pushConfigToServer(partial: { locaisUrl?: string; ocorrenciasUrl?: stri
 
 export const CsvHelper = {
   // Inicialização e sincronização mútua e permanente (localStorage <-> backend)
-  async initAndSyncUrls(): Promise<{ locaisUrl: string; ocorrenciasUrl: string; faltasUrl: string; verificacaoUrl: string }> {
+  async initAndSyncUrls(): Promise<{
+    locaisUrl: string;
+    ocorrenciasUrl: string;
+    faltasUrl: string;
+    verificacaoUrl: string;
+    controleUrl: string;
+    controleStatus: string;
+  }> {
     // 1. Carrega do localStorage
     const localLocais = this.getLocaisSheetUrl();
     const localOcorr = this.getOcorrenciasSheetUrl();
     const localFaltas = this.getFaltasSheetUrl();
     const localVerif = this.getVerificacaoSheetUrl();
+    const localControle = this.getControleSheetUrl();
+    const localStatus = this.getControleStatus();
 
     if (localLocais) SHEET_URLS.PLANILHA_1_LOCAIS = localLocais;
     if (localOcorr) SHEET_URLS.PLANILHA_2_OCORRENCIAS = localOcorr;
     if (localFaltas) SHEET_URLS.PLANILHA_3_FALTAS = localFaltas;
     if (localVerif) SHEET_URLS.PLANILHA_4_VERIFICACAO = localVerif;
+    if (localControle) SHEET_URLS.PLANILHA_5_CONTROLE = localControle;
 
     // 2. Consulta o backend central para sincronização persistente
     try {
@@ -145,6 +180,19 @@ export const CsvHelper = {
           needPush = true;
         }
 
+        // Sincroniza Controle de Acesso Remoto
+        if (serverConfig.controleStatus) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.CONTROLE_STATUS, serverConfig.controleStatus);
+          } catch {}
+        }
+        if (serverConfig.controleUrl && typeof serverConfig.controleUrl === 'string' && serverConfig.controleUrl.startsWith('http')) {
+          this.setControleSheetUrl(serverConfig.controleUrl, false);
+        } else if (localControle && localControle.startsWith('http')) {
+          pushPayload.controleUrl = localControle;
+          needPush = true;
+        }
+
         if (needPush) {
           pushConfigToServer(pushPayload);
         }
@@ -158,10 +206,19 @@ export const CsvHelper = {
       ocorrenciasUrl: this.getOcorrenciasSheetUrl(),
       faltasUrl: this.getFaltasSheetUrl(),
       verificacaoUrl: this.getVerificacaoSheetUrl(),
+      controleUrl: this.getControleSheetUrl(),
+      controleStatus: this.getControleStatus(),
     };
   },
 
-  async syncWithServer(): Promise<{ locaisUrl: string; ocorrenciasUrl: string; faltasUrl: string; verificacaoUrl: string }> {
+  async syncWithServer(): Promise<{
+    locaisUrl: string;
+    ocorrenciasUrl: string;
+    faltasUrl: string;
+    verificacaoUrl: string;
+    controleUrl: string;
+    controleStatus: string;
+  }> {
     return this.initAndSyncUrls();
   },
 
@@ -171,16 +228,22 @@ export const CsvHelper = {
     ocorrenciasUrl?: string;
     faltasUrl?: string;
     verificacaoUrl?: string;
+    controleUrl?: string;
+    controleStatus?: 'LIBERADO' | 'BLOQUEADO';
   }): Promise<boolean> {
     const cleanLocais = urls.locaisUrl !== undefined ? urls.locaisUrl.trim() : this.getLocaisSheetUrl();
     const cleanOcorr = urls.ocorrenciasUrl !== undefined ? urls.ocorrenciasUrl.trim() : this.getOcorrenciasSheetUrl();
     const cleanFaltas = urls.faltasUrl !== undefined ? urls.faltasUrl.trim() : this.getFaltasSheetUrl();
     const cleanVerif = urls.verificacaoUrl !== undefined ? urls.verificacaoUrl.trim() : this.getVerificacaoSheetUrl();
+    const cleanControle = urls.controleUrl !== undefined ? urls.controleUrl.trim() : this.getControleSheetUrl();
+    const cleanStatus = urls.controleStatus || this.getControleStatus();
 
     this.setLocaisSheetUrl(cleanLocais, false);
     this.setOcorrenciasSheetUrl(cleanOcorr, false);
     this.setFaltasSheetUrl(cleanFaltas, false);
     this.setVerificacaoSheetUrl(cleanVerif, false);
+    this.setControleSheetUrl(cleanControle, false);
+    this.setControleStatus(cleanStatus, false);
 
     try {
       const res = await fetch('/api/sheet-config', {
@@ -191,6 +254,8 @@ export const CsvHelper = {
           ocorrenciasUrl: cleanOcorr,
           faltasUrl: cleanFaltas,
           verificacaoUrl: cleanVerif,
+          controleUrl: cleanControle,
+          controleStatus: cleanStatus,
         }),
       });
       return res.ok;
@@ -556,6 +621,136 @@ export const CsvHelper = {
       }
     } catch {}
     return null;
+  },
+
+  // --- Controle de Acesso Remoto (Visitantes PM3) ---
+  getControleSheetUrl(): string {
+    try {
+      const val = localStorage.getItem(STORAGE_KEYS.CONTROLE_URL);
+      if (val && val.trim().startsWith('http')) {
+        SHEET_URLS.PLANILHA_5_CONTROLE = val.trim();
+        return val.trim();
+      }
+    } catch {}
+
+    if (SHEET_URLS.PLANILHA_5_CONTROLE && SHEET_URLS.PLANILHA_5_CONTROLE.trim().startsWith('http')) {
+      return SHEET_URLS.PLANILHA_5_CONTROLE.trim();
+    }
+    return '';
+  },
+
+  setControleSheetUrl(url: string, pushToServer = true) {
+    if (url && url.trim().startsWith('http')) {
+      const clean = url.trim();
+      try {
+        localStorage.setItem(STORAGE_KEYS.CONTROLE_URL, clean);
+      } catch {}
+      SHEET_URLS.PLANILHA_5_CONTROLE = clean;
+      if (pushToServer) pushConfigToServer({ controleUrl: clean });
+    } else {
+      try {
+        localStorage.removeItem(STORAGE_KEYS.CONTROLE_URL);
+      } catch {}
+      SHEET_URLS.PLANILHA_5_CONTROLE = '';
+      if (pushToServer) pushConfigToServer({ controleUrl: '' });
+    }
+  },
+
+  getControleStatus(): 'LIBERADO' | 'BLOQUEADO' {
+    try {
+      const val = localStorage.getItem(STORAGE_KEYS.CONTROLE_STATUS);
+      if (val === 'BLOQUEADO') return 'BLOQUEADO';
+    } catch {}
+    return 'LIBERADO';
+  },
+
+  async setControleStatus(status: 'LIBERADO' | 'BLOQUEADO', pushToServer = true): Promise<boolean> {
+    try {
+      localStorage.setItem(STORAGE_KEYS.CONTROLE_STATUS, status);
+    } catch {}
+
+    if (pushToServer) {
+      try {
+        await fetch('/api/controle-acesso', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status,
+            controleUrl: this.getControleSheetUrl(),
+          }),
+        });
+        return true;
+      } catch (e) {
+        console.warn('Erro ao atualizar controle de acesso no servidor:', e);
+      }
+    }
+    return true;
+  },
+
+  async checkLiveControleStatus(customUrl?: string): Promise<{
+    status: 'LIBERADO' | 'BLOQUEADO';
+    source: string;
+    rawText?: string;
+  }> {
+    const targetUrl = customUrl !== undefined ? customUrl.trim() : this.getControleSheetUrl();
+
+    // 1. Se tiver URL da planilha Google, busca diretamente
+    if (targetUrl && targetUrl.startsWith('http')) {
+      try {
+        const text = await fetchGoogleSheetCsv(targetUrl);
+        if (text && text.length > 0) {
+          const status = parseControleStatus(text);
+          await this.setControleStatus(status, true);
+          return {
+            status,
+            source: 'planilha_google',
+            rawText: text.slice(0, 150).trim(),
+          };
+        }
+      } catch (err: any) {
+        console.warn('Falha ao ler planilha remota de controle de acesso:', err);
+      }
+    }
+
+    // 2. Consulta o backend do servidor (persistência centralizada em sheet-config.json)
+    try {
+      const res = await fetch('/api/controle-acesso');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'BLOQUEADO' || data.status === 'LIBERADO') {
+          try {
+            localStorage.setItem(STORAGE_KEYS.CONTROLE_STATUS, data.status);
+          } catch {}
+          if (data.controleUrl && !this.getControleSheetUrl()) {
+            this.setControleSheetUrl(data.controleUrl, false);
+          }
+          return {
+            status: data.status,
+            source: 'servidor_central',
+          };
+        }
+      }
+    } catch (e) {}
+
+    // 3. Fallback no arquivo local do asset disponibilizado pelo usuário
+    try {
+      const localAsset = await fetch('/assets/aistudio/CONTROLE_ACESSO_c0b3a704');
+      if (localAsset.ok) {
+        const text = await localAsset.text();
+        const status = parseControleStatus(text);
+        return {
+          status,
+          source: 'arquivo_local',
+          rawText: text.trim(),
+        };
+      }
+    } catch {}
+
+    // 4. Último fallback: valor salvo em localStorage
+    return {
+      status: this.getControleStatus(),
+      source: 'local_storage',
+    };
   },
 
   // --- Limpeza Total de Caches Antigos & Reset para 2º Turno ---

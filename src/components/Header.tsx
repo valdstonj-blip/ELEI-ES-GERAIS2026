@@ -21,6 +21,7 @@ interface HeaderProps {
   onOpenSettings?: () => void;
   isAdmin?: boolean;
   userRole?: string;
+  controleStatus?: 'LIBERADO' | 'BLOQUEADO';
   counts: {
     locais: number;
     ocorrencias: number;
@@ -41,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   isAdmin = true,
   userRole = 'admin',
+  controleStatus = 'LIBERADO',
   counts,
 }) => {
   return (
@@ -58,14 +60,29 @@ export const Header: React.FC<HeaderProps> = ({
                 EMG-PM/3
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className="text-[10px] text-slate-400 font-semibold">
                 2º Turno Oficial • 24 e 25 de Outubro
               </span>
               {isAdmin ? (
-                <span className="px-1.5 py-0.2 rounded text-[9px] font-black tracking-wide bg-amber-400/20 text-amber-300 border border-amber-400/40 uppercase">
-                  ADMIN
-                </span>
+                <>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black tracking-wide bg-amber-400/20 text-amber-300 border border-amber-400/40 uppercase">
+                    ADMIN
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    title="Clique para gerenciar o Controle de Acesso Remoto de Visitantes"
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-black tracking-wide border uppercase flex items-center gap-1 cursor-pointer transition-colors ${
+                      controleStatus === 'BLOQUEADO'
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 hover:bg-rose-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${controleStatus === 'BLOQUEADO' ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'}`} />
+                    <span>VISITANTES: {controleStatus}</span>
+                  </button>
+                </>
               ) : (
                 <span className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wide bg-slate-800 text-slate-300 border border-slate-700 uppercase">
                   USUÁRIO PM3
