@@ -60,7 +60,6 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
   const [isClearing, setIsClearing] = useState(false);
   const [clearSuccessMsg, setClearSuccessMsg] = useState<string | null>(null);
   const [isTestingControle, setIsTestingControle] = useState(false);
-  const [isTogglingControle, setIsTogglingControle] = useState(false);
   const [controleNotice, setControleNotice] = useState<string | null>(null);
 
   // Recarrega URLs salvas sempre que o modal abre
@@ -84,19 +83,6 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleToggleControle = async () => {
-    setIsTogglingControle(true);
-    const nextStatus = controleStatus === 'LIBERADO' ? 'BLOQUEADO' : 'LIBERADO';
-    await CsvHelper.setControleStatus(nextStatus, true);
-    setControleStatus(nextStatus);
-    setIsTogglingControle(false);
-    setControleNotice(
-      nextStatus === 'BLOQUEADO'
-        ? 'ACESSO BLOQUEADO! O status foi marcado como BLOQUEADO. Para desconectar o visitante em outro computador no Vercel, certifique-se de alterar também a célula A2 da Planilha Google para BLOQUEADO.'
-        : 'ACESSO LIBERADO! Visitantes podem acessar o painel normalmente.'
-    );
-  };
-
   const handleTestControleSheet = async () => {
     setIsTestingControle(true);
     setControleNotice(null);
@@ -104,7 +90,7 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
       const res = await CsvHelper.checkLiveControleStatus(controleUrl);
       setControleStatus(res.status);
       setControleNotice(
-        `Planilha Google lida com sucesso! Status detectado na célula: [${res.status}]. Acesso dos visitantes: [${res.status}].`
+        `Planilha Google lida com sucesso! Status detectado na célula A2: [${res.status}]. Acesso dos visitantes: [${res.status}].`
       );
     } catch (err: any) {
       setControleNotice(`Erro ao ler status: ${err?.message || 'Falha na conexão'}`);
@@ -585,125 +571,58 @@ export const SheetConnectionModal: React.FC<SheetConnectionModalProps> = ({
             )}
           </div>
 
-          {/* 4. Controle Remoto de Acesso de Visitantes (Kill-Switch PM/3) */}
-          <div className={`border rounded-xl p-4 space-y-3 transition-colors ${
-            controleStatus === 'BLOQUEADO' ? 'bg-rose-50/80 border-rose-300' : 'bg-slate-50 border-slate-200'
-          }`}>
+          {/* 4. Planilha de Controle de Acesso (Visitantes PM/3) */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <span className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                  <Power className="w-4 h-4 text-rose-600" />
-                  <span>4. Controle de Acesso Remoto de Visitantes (Kill-Switch PM/3)</span>
+                  <Power className="w-4 h-4 text-blue-600" />
+                  <span>4. Planilha de Controle de Acesso (Visitantes PM/3)</span>
                 </span>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Controle central para desconectar ou bloquear o acesso de visitantes (<code className="bg-slate-200 px-1 rounded text-slate-700 font-mono">pm3</code>) caso o expediente finalize.
+                  Planilha Google para controle do acesso de visitantes (<code className="bg-slate-200 px-1 rounded text-slate-700 font-mono">pm3</code>). Alterne na célula A2 entre LIBERADO e BLOQUEADO.
                 </p>
               </div>
 
-              {/* Status Badge & Toggle Button */}
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider border shadow-2xs ${
-                  controleStatus === 'BLOQUEADO'
-                    ? 'bg-rose-100 text-rose-800 border-rose-300'
-                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                }`}>
-                  {controleStatus === 'BLOQUEADO' ? (
-                    <>
-                      <Lock className="w-3.5 h-3.5 text-rose-600" />
-                      <span>BLOQUEADO</span>
-                    </>
-                  ) : (
-                    <>
-                      <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>LIBERADO</span>
-                    </>
-                  )}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={handleToggleControle}
-                  disabled={isTogglingControle}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wide text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50 ${
-                    controleStatus === 'BLOQUEADO'
-                      ? 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700'
-                      : 'bg-rose-600 hover:bg-rose-500 active:bg-rose-700'
-                  }`}
-                  title={controleStatus === 'BLOQUEADO' ? 'Liberar acesso para visitantes' : 'Bloquear e desconectar visitantes agora'}
-                >
-                  {isTogglingControle ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : controleStatus === 'BLOQUEADO' ? (
-                    <Unlock className="w-3.5 h-3.5" />
-                  ) : (
-                    <Lock className="w-3.5 h-3.5" />
-                  )}
-                  <span>
-                    {controleStatus === 'BLOQUEADO' ? 'Liberar Acesso Agora' : 'Bloquear Acesso Agora'}
-                  </span>
-                </button>
-              </div>
+              <a
+                href={controleUrl.trim() || 'https://docs.google.com/spreadsheets/d/1mFNqir2Y3Dwxt2WKQDMhCgfp2CgS1pFGfR_o5cwpw_w/edit'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg transition-colors shadow-2xs shrink-0"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Abrir Planilha no Google</span>
+              </a>
             </div>
 
-            {/* Google Sheet URL para Controle Automático */}
-            <div className="space-y-1.5 pt-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-slate-700 block">
-                  Link da Planilha Google "CONTROLE ACESSO" (Coluna A: LIBERADO / BLOQUEADO):
-                </label>
-                <a
-                  href={controleUrl.trim() || 'https://docs.google.com/spreadsheets/d/1mFNqir2Y3Dwxt2WKQDMhCgfp2CgS1pFGfR_o5cwpw_w/edit'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Abrir Planilha no Google</span>
-                </a>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={controleUrl}
-                  onChange={(e) => setControleUrl(e.target.value)}
-                  placeholder="Cole aqui o link da planilha CONTROLE ACESSO compartilhada..."
-                  className="flex-1 text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={handleTestControleSheet}
-                  disabled={isTestingControle}
-                  className="px-3 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-60"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingControle ? 'animate-spin' : ''}`} />
-                  <span>Testar / Ler Planilha</span>
-                </button>
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-[11px] text-blue-900 space-y-1">
-                <p className="font-bold">
-                  ⚡ Desconexão Remota em Tempo Real (Vercel / Celular / Computador):
-                </p>
-                <p>
-                  1. O computador do visitante e o seu celular comunicam-se via Planilha Google.
-                </p>
-                <p>
-                  2. Para desconectar o visitante de qualquer computador: abra a planilha e mude a célula <strong>A2</strong> para <strong>BLOQUEADO</strong>.
-                </p>
-                <p>
-                  3. O sistema do visitante verifica a cada <strong>5 segundos</strong>, fecha a tela dele na hora e bloqueia novas tentativas de login.
-                </p>
-              </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={controleUrl}
+                onChange={(e) => setControleUrl(e.target.value)}
+                placeholder="Cole aqui o link da planilha CONTROLE ACESSO compartilhada..."
+                className="flex-1 text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleTestControleSheet}
+                disabled={isTestingControle}
+                className="px-3 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isTestingControle ? 'animate-spin' : ''}`} />
+                <span>Testar / Ler Planilha</span>
+              </button>
             </div>
 
             {controleNotice && (
               <div
                 className={`text-[11px] font-semibold p-2.5 rounded-lg flex items-center gap-1.5 ${
-                  controleStatus === 'BLOQUEADO'
-                    ? 'bg-rose-100 text-rose-900 border border-rose-300'
-                    : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                  controleNotice.includes('BLOQUEADO')
+                    ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                 }`}
               >
-                {controleStatus === 'BLOQUEADO' ? (
+                {controleNotice.includes('BLOQUEADO') ? (
                   <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
                 ) : (
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
