@@ -1,163 +1,180 @@
-# PROMPT MESTRE E ESPECIFICAÇÃO DE REPLICAÇÃO DO SISTEMA
-## EMG-PM/3 — SISTEMA INTEGRADO DE GESTÃO E ACOMPANHAMENTO OPERACIONAL (ELEIÇÕES)
+# SISTEMA EMG-PM/3 — DOCUMENTAÇÃO TÉCNICA E MODELO DE REPLICAÇÃO (VERSÃO 3.0)
+## Manual de Arquitetura, Kill-Switch Remoto via Google Sheets e Prompt Mestre
 
-> **Como usar este documento:**  
-> Caso deseje criar um sistema idêntico ou uma variação deste sistema (ex.: para Eleições Municipais, Grandes Eventos, Carnaval, Réveillon ou Operações Especiais), copie o bloco **"PROMPT MESTRE PARA O AI STUDIO"** abaixo e cole na primeira mensagem do novo projeto no AI Studio. Ele contém todas as diretrizes de arquitetura, peculiaridades de regras de negócio, tratamento de planilhas e interface.
+> **Finalidade deste Documento:**  
+> Este documento consolida todas as inovações, regras de negócio, especificações visuais e o mecanismo de **Bloqueio/Desconexão Remota em Tempo Real (Kill-Switch)** desenvolvidos para o sistema EMG-PM/3.  
+> Ele serve tanto como documentação oficial deste projeto quanto como **molde/template completo para clonagem e replicação em novos sistemas** (ex.: Eleições futuras, Carnaval, Réveillon, Grandes Eventos ou Operações Integradas).
 
 ---
+
+# PARTE 1: ORIENTAÇÃO OPERACIONAL — APÓS O TÉRMINO DA OPERAÇÃO
+
+Como a eleição terminou e a próxima do mesmo tipo só ocorrerá em 2 anos, existem **3 caminhos operacionais** para o sistema e o link no Vercel:
+
+### 1. Opção Recomendada: Manter na Vercel e Ativar o Bloqueio na Planilha (`BLOQUEADO`)
+- **Como funciona:** Você simplesmente abre a Planilha Google de Controle de Acesso e altera a célula **A2** para **`BLOQUEADO`**.
+- **O que acontece:** Qualquer pessoa que tenha o link salvo (no celular, favoritos ou histórico) não conseguirá visualizar nenhum dado. A tela de login exibirá imediatamente:
+  > *"ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi interrompido!"*
+- **Vantagem:** O custo na Vercel é **zero (gratuito)**. O link permanece guardado e, daqui a 2 anos ou num teste futuro, basta você alterar a célula para `LIBERADO` e o sistema volta a funcionar instantaneamente, sem precisar reconfigurar servidores ou reimportar repositórios.
+
+### 2. Opção Pausar o Projeto na Vercel (*Pause Project*)
+- **Como funciona:** No painel da Vercel (`vercel.com`), acesse o projeto `Settings` ➔ `General` ➔ Role até o final ➔ Clique em **"Pause Project"**.
+- **O que acontece:** O domínio para de responder na web (exibe tela padrão de projeto pausado). Ninguém consegue acessar nem a tela de login.
+- **Vantagem:** Totalmente reversível com um único clique em *"Resume Project"*.
+
+### 3. Opção Excluir o Projeto na Vercel (*Delete Project*)
+- **Como funciona:** No painel da Vercel ➔ `Settings` ➔ `Advanced` ➔ `Delete Project`.
+- **Consequências:**
+  - O link atual (ex.: `eleicoes-pmerj.vercel.app`) é **apagado imediatamente** da internet.
+  - O código-fonte **NÃO se perde**, pois ele fica guardado no repositório Git e no AI Studio.
+  - Daqui a 2 anos, quando for subir novamente, você poderá conectar o novo repositório na Vercel. Se o nome anterior estiver vago, poderá usar o mesmo, ou poderá escolher um novo endereço mais adequado (ex.: `eleicoes2028-pmerj.vercel.app`).
+  - **Recomendação:** Se você não quer deixar nenhum rastro público online durante o intervalo de 2 anos, a exclusão na Vercel é 100% segura e limpa.
+
+---
+
+# PARTE 2: ESPECIFICAÇÃO DE DESIGN, CORES E INTERFACE
+
+### 1. Paleta de Cores (Tailwind CSS)
+O sistema adota um padrão visual sóbrio, corporativo e com rigor militar:
+
+| Função Visual | Classes Tailwind | Hexadecimal Aproximado | Aplicação no Sistema |
+| :--- | :--- | :--- | :--- |
+| **Fundo Principal** | `bg-slate-100` / `bg-slate-50` | `#F1F5F9` / `#F8FAFC` | Fundo geral da aplicação e áreas de leitura |
+| **Superfícies / Cards**| `bg-white` + `border-slate-200` | `#FFFFFF` / `#E2E8F0` | Cards de KPIs, tabelas, modais |
+| **Cabeçalhos e Texto Forte** | `text-slate-900` / `bg-slate-900` | `#0F172A` | Títulos oficiais, badges de identificação e footer |
+| **Azul Institucional** | `bg-blue-700` / `text-blue-700` | `#1D4ED8` | Ações principais, aba ativa, destaques e botões |
+| **Verde Status Liberado** | `bg-emerald-500` / `text-emerald-700` | `#10B981` / `#047857` | Badge de visitantes liberados, confirmações |
+| **Vermelho Alerta / Bloqueio** | `bg-rose-600` / `text-rose-700` | `#E11D48` / `#BE123C` | Badge de bloqueio, áreas sensíveis, avisos de corte |
+| **Âmbar Atenção** | `bg-amber-500` / `text-amber-700` | `#F59E0B` / `#B45309` | Urnas em implantação, alertas operacionais |
+
+### 2. Tipografia e Densidade
+- **Fonte Padrão:** Sans-serif nativa de alta legibilidade (`Inter`, `system-ui`).
+- **Tabelas Compactas:** Altura de linha padronizada (`py-2` a `py-2.5`), sem estufamento por textos longos. Textos longos são truncados ou visualizados via modal dedicado (*"Ficha da Ocorrência"*).
+- **Sem Emojis Informais:** Interface utiliza exclusivamente ícones profissionais da biblioteca `lucide-react` (ex.: `Shield`, `FileSpreadsheet`, `Download`, `RefreshCw`, `Lock`, `ExternalLink`).
+
+---
+
+# PARTE 3: AUTENTICAÇÃO E PERFIS DE USUÁRIO (RBAC)
+
+O sistema possui controle de acesso com 2 perfis claramente segregados:
+
+| Perfil | Usuário | Senha Padrão | Funcionalidades Permitidas | Restrições |
+| :--- | :--- | :--- | :--- | :--- |
+| **ADMINISTRADOR** | `admin` | `74029jr` | - Acesso total às 5 abas<br>- Configuração de URLs de planilhas (Item 1 ao 4)<br>- Aba exclusiva: **Verificação e Auditoria de Faltas**<br>- Visualização do badge de status do Kill-Switch no topo<br>- Imune ao bloqueio de visitantes | Nenhuma restrição |
+| **OPERADOR / VISITANTE** | `pm3` | `pm3` | - Visualização de Locais de Votação<br>- Visualização de Ocorrências e Ficha detalhada<br>- Visualização de Faltas e Ficha de Envio<br>- Acesso ao Dashboard de BI (Looker Studio)<br>- Exportação de relatórios em PDF | - **Botão de Configurar Planilhas OCULTO**<br>- **Aba de Verificação de Faltas OCULTA**<br>- **Sujeito à expulsão imediata pelo Kill-Switch** |
+
+---
+
+# PARTE 4: O MECANISMO DE KILL-SWITCH REMOTO (BLOQUEIO E DESCONEXÃO)
+
+Esta é uma das maiores inovações arquiteturais do projeto: **controle centralizado em tempo real sem necessidade de servidor de banco de dados próprio (serverless puro)**.
+
+### Como Funciona a Comunicação Cruzada (Celular Admin ➔ PC Visitante)
+1. **Origem da Verdade:** Uma Planilha Google dedicada (`CONTROLE ACESSO`).
+   - Coluna A, Linha 1: Cabeçalho `CONTROLE`
+   - Coluna A, Linha 2: Dropdown com as opções `LIBERADO` ou `BLOQUEADO`
+2. **Sincronização em Tempo Real (Polling a cada 5 segundos):**
+   - O computador do visitante executa um ciclo de verificação em background a cada 5.000ms via `checkLiveControleStatus()`.
+   - A requisição utiliza cache-busting dinâmico (`_t=${Date.now()}`) para impedir que a Vercel ou o navegador entreguem dados em cache.
+3. **Ação Imediata ao Detectar `BLOQUEADO`:**
+   - O sistema do visitante **purga instantaneamente** o `localStorage` (`auth_token`, `user_role`).
+   - Altera os estados da aplicação para deslogado (`isAuthenticated = false`, `userRole = ''`).
+   - Redireciona o usuário para a tela de login exibindo o banner:
+     > **ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi interrompido!**
+   - Não exibe ícones agressivos de alerta — visual limpo, centralizado e corporativo.
+   - Qualquer nova tentativa de login do usuário `pm3` é sumariamente rejeitada enquanto a planilha estiver `BLOQUEADO`.
+4. **Painel do Administrador:**
+   - No cabeçalho superior (`Header`), o Admin visualiza um indicador visual em tempo real:
+     - `VISITANTES: LIBERADO` (em tom esmeralda discreto)
+     - `VISITANTES: BLOQUEADO` (em tom vermelho rose)
+   - No modal de planilhas (**Item 4**): O Admin conta com o botão **"Abrir Planilha no Google"**, que abre diretamente o Google Sheets para alterar a célula A2 do celular ou de qualquer computador.
+
+---
+
+# PARTE 5: ARQUITETURA DE DADOS E CONEXÃO COM AS 4 PLANILHAS GOOGLE
+
+Todas as conexões utilizam o formato CSV público exportado pelo Google Sheets:
+
+1. **Planilha 1: Locais de Votação (5.102 registros)**
+   - Extrai: Zona Eleitoral, Seção, Local, Endereço, Bairro, Município, CPA, OPM, Total de Eleitores, Indicador de Local Sensível e Falhas de Energia Elétrica.
+2. **Planilha 2: Ocorrências de Vulto (Respostas do Google Forms)**
+   - Extrai: Carimbo de data/hora, CPA, OPM, Município, as 5 Perguntas Oficiais de Crimes e a Dinâmica Narrativa do Fato.
+   - **Nota Metodológica Obrigatória:** Todo relatório e card de ocorrências exibe a nota explicativa de que os números referem-se a ocorrências/registros, constando os indivíduos na dinâmica.
+3. **Planilha 3: Faltas de Efetivo no POE (Respostas do Google Forms)**
+   - Heurística inteligente que identifica nomes, patentes militares (SD, CB, SGT, SUBTEN, TEN, CAP, MAJ, CEL) e RGs.
+   - Ignora automaticamente envios sem faltas (*"Sem alteração"*, *"Zero"*, *"OK"*).
+   - Ficha de Envio com botão de cópia formatada para despacho militar/WhatsApp.
+4. **Planilha 4: Controle de Acesso (Kill-Switch)**
+   - Lê a célula A2 para autorizar ou suspender o acesso em massa dos visitantes.
+   - Tolerância do parser a arquivos curtos (`CONTROLE\r\nLIBERADO` tem 18 caracteres).
+
+---
+
+# PARTE 6: PROMPT MESTRE PARA COPIAR E COLAR NO AI STUDIO (REPLICAÇÃO EM OUTROS SISTEMAS)
+
+Copie o conteúdo dentro do bloco de código abaixo e cole no AI Studio para recriar esta mesma arquitetura em qualquer novo projeto:
 
 ```markdown
-# PROMPT MESTRE PARA COPIAR E COLAR NO AI STUDIO:
-
-Atue como Engenheiro de Software Sênior especialista em aplicações militares e de segurança pública. Construa um Sistema Integrado de Gestão e Acompanhamento Operacional para a Seção de Planejamento e Operações (EMG-PM/3) com as seguintes especificações e padrões rigorosos:
+Atue como Engenheiro de Software Sênior especialista em aplicações corporativas e de segurança pública. Construa um Sistema Integrado de Gestão e Acompanhamento Operacional com arquitetura React + Vite + TypeScript + Tailwind CSS, com controle de perfis (RBAC) e Mecanismo de Kill-Switch Remoto via Google Sheets conforme as especificações detalhadas abaixo:
 
 ---
 
-### 1. ARQUITETURA GERAL E STACK TECNOLÓGICA
-- **Framework:** React SPA com Vite e TypeScript.
-- **Estilização:** Tailwind CSS (tema sóbrio e militar: slate-900, azul operacional blue-600, alertas rose-600, âmbar para atenção e esmeralda para confirmações).
-- **Ícones:** Lucide React (visual limpo, corporativo e sem emojis informais).
-- **Exportação de Relatórios:** jsPDF + jspdf-autotable (relatórios paisagem A4 com cabeçalho oficial, numeração de páginas, totalizadores e formatação de tabela compacta).
-- **Persistência e Cache:** LocalStorage para retenção de sessão, configurações de links e cache resiliente offline em caso de falha de conexão com a nuvem.
-- **Dispositivos Móveis:** Totalmente responsivo para smartphones e computadores (menu com rolagem horizontal suave touch-pan-x, cards flexíveis e botões com área de toque ergonômica).
+### 1. IDENTIDADE VISUAL E DESIGN SYSTEM
+- Paleta Militar/Corporativa: Fundo cinza suave (slate-100/slate-50), cards brancos com bordas slate-200, azul operacional (blue-700), esmeralda (emerald-600) para status liberado e rose (rose-600) para status bloqueado ou alertas.
+- Tipografia limpa, tabelas compactas sem estufamento de linhas por narrativas longas.
+- Ícones profissionais da biblioteca Lucide React (sem emojis informais).
+- Responsividade completa para smartphones e desktops (touch-pan-x, menus adaptáveis).
 
 ---
 
 ### 2. CONTROLE DE ACESSO E PERFIS (RBAC)
-- Tela de Login com segurança de perfil:
-  - **Perfil ADMIN** (`admin` / senha `74029jr`): Acesso irrestrito a todas as abas, modal de configuração de links das planilhas Google Sheets, auditoria de faltas e ferramentas de purga de cache.
-  - **Perfil OPERACIONAL PM3** (`pm3` / senha `pm3`): Visualização operacional completa (Locais, Ocorrências, Faltas, Dashboard BI), porém o botão de configuração de links de planilhas e a aba de Verificação de Faltas ficam ocultos.
+- Tela de Login com validação de perfis:
+  1. Perfil ADMIN (usuário: `admin` / senha: `[SENHA_ADMIN]`): Acesso irrestrito a todas as abas, modal de configuração de links das planilhas Google e abas de auditoria. Imune ao corte de visitantes.
+  2. Perfil OPERADOR / VISITANTE (usuário: `visitante` ou `pm3` / senha: `[SENHA_VISITANTE]`): Acesso às abas operacionais. Botão de configuração de planilhas e abas de auditoria ficam estritamente ocultos. Sujeito ao Kill-Switch remoto.
 
 ---
 
-### 3. ESTRUTURA DAS 5 ABAS PRINCIPAIS
-
-#### ABA 1: LOCAIS DE VOTAÇÃO
-- **Objetivo:** Gestão dos locais de votação, distribuição de efetivo, locais sensíveis e controle de implantação/desmobilização de urnas.
-- **Filtros:** Busca textual rápida (bairro, colégio, zona eleitoral, endereço), filtro por Comando Intermediário (1º a 8º CPA, CPP, COE, CPE), filtro por OPM e status de área sensível.
-- **Indicadores:** Total de locais, total de eleitores aptos, total de seções, locais sensíveis (com badge vermelho), urnas implantadas e desmobilizadas.
-- **Coluna Especial de Energia Elétrica:** Campo dedicado para registrar furto de cabos ou falhas na rede elétrica da concessionária.
-- **Exportação PDF:** Relatório analítico completo e resumido por CPA/OPM.
-
-#### ABA 2: OCORRÊNCIAS DE VULTO DO PLEITO
-- **Origem:** Planilha de Respostas do Google Forms da Operação.
-- **As 5 Perguntas Oficiais de Múltipla Escolha:**
-  1. Crimes comuns contra candidatos
-  2. Crimes comuns nos locais de votação/apuração
-  3. Crimes Eleitorais
-  4. Ocorrências e Incidentes de Segurança Pública no entorno/locais
-  5. Prisões/apreensões no entorno e/ou locais de votação
-- **Card de Apenas Dinâmica:** Ocorrências que narraram fatos relevantes no histórico sem assinalar uma tipificação específica.
-- **Nota Metodológica Oficial (Texto Exato e Obrigatório):**
-  `* NOTA METODOLÓGICA / TÉCNICA: Os quantitativos referem-se ao número de ocorrências e registros informados pelas OPMs via formulário de ocorrência. O quantitativo exato de indivíduos conduzidos/custodiados caso existam, constam no histórico (Dinâmica do Fato) de cada registro na tabela.`
-- **Tooltips dos Cards:** Texto orientativo: `(o número exato de indivíduos consta na dinâmica da ocorrência.)`.
-- **Tabela Compacta e Uniforme:** As linhas da tabela mantêm altura padronizada; a narrativa longa da dinâmica NÃO estufa a tabela.
-- **Modal "Ficha da Ocorrência":** Ao clicar em "Ver Ficha", abre modal com todos os dados da ocorrência, destaque para a dinâmica e botão **"Copiar Histórico"** para a área de transferência com feedback visual temporário (*"Copiado com sucesso!"*).
-
-#### ABA 3: FALTAS DE EFETIVO NO POE
-- **Origem:** Planilha do Formulário de Faltas do POE.
-- **Heurística de Contagem Inteligente:**
-  - Identificação precisa de militares faltosos em campos de texto livre com separadores (ponto e vírgula, quebra de linha).
-  - Reconhecimento de patentes (SD, CB, SGT, SUBTEN, TEN, CAP, MAJ, CEL) e registros gerais (RG).
-  - Exclusão rigorosa de termos de "sem falta" (*"Sem alteração"*, *"Nada consta"*, *"Não houve"*, *"OK"*, *"0"*).
-- **Consolidação Estatística:** Total de envios, total de policiais faltosos, OPMs afetadas, e resumo diário por Carimbo de Data/Hora.
-- **Modal "Ficha de Envio":** Modal detalhado contendo no rodapé o botão **"Copiar Toda a Ficha"**, que formata um texto limpo e padronizado pronto para envio via WhatsApp ou despacho militar:
-  ```text
-  === FICHA DE ENVIO DE FALTAS NO POE ===
-  Carimbo Data/Hora: [Data/Hora]
-  Comando Intermediário: [CPA]
-  OPM: [BPM]
-  Serviço / Turno: [Serviço]
-  Informante: [Posto Nome] (RG PM: [RG])
-  Quantitativo de Faltas: [X] falta(s)
-
-  --- RELAÇÃO DE POLICIAIS FALTOSOS (POE) ---
-  [Lista dos militares faltosos]
-
-  --- DISPENSAS REGISTRADAS NO POE ---
-  [Dispensas se houver]
-  ```
-
-#### ABA 4: VERIFICAÇÃO DE FALTAS (EXCLUSIVA ADMIN)
-- **Objetivo:** Auditoria contra envios duplicados pela mesma OPM, identificação de divergências e validação para confecção do relatório oficial de efetivo.
-
-#### ABA 5: DASHBOARD ELEIÇÕES 2026 (BUSINESS INTELLIGENCE)
-- **Integração:** Incorporação via `<iframe>` do painel oficial do Google Looker Studio / Data Studio.
-- **Acesso Seguro:** Exibe banner orientando que o acesso é restrito aos e-mails autorizados no Google corporativo. Se o usuário não possuir autorização no Google, o próprio Looker bloqueia o acesso com tela de permissão.
-- **Botões de Ação:** "Recarregar Painel" e "Abrir no Looker Studio" (abertura direta em tela cheia / nova aba).
-- **Compatibilidade Móvel:** Dica para girar o aparelho na horizontal ou abrir em tela cheia no navegador do celular.
+### 3. MECANISMO DE KILL-SWITCH REMOTO EM TEMPO REAL (DESCONEXÃO VIA GOOGLE SHEETS)
+- O sistema deve permitir que o Administrador suspenda o acesso de todos os visitantes em tempo real diretamente por uma Planilha Google (sem necessidade de banco de dados SQL).
+- Especificação da Planilha de Controle:
+  - Cabeçalho A1: `CONTROLE`
+  - Célula A2: Dropdown com as opções `LIBERADO` ou `BLOQUEADO`.
+- Polling em Segundo Plano:
+  - O aplicativo do visitante faz requisições a cada 5 segundos na URL CSV da planilha com parâmetro de cache-busting (`_t=${Date.now()}`).
+  - O parser de CSV deve aceitar respostas curtas (o texto `CONTROLE\r\nLIBERADO` possui menos de 20 caracteres).
+- Ação de Desconexão Imediata:
+  - No segundo em que a célula A2 se torna `BLOQUEADO`, qualquer sessão de visitante ativa é encerrada imediatamente. O localStorage de autenticação é apagado, a tela fecha e redireciona para o login.
+  - Mensagem padronizada na tela de login:
+    "ACESSO SUSPENSO PELA ADMINISTRAÇÃO: O acesso para usuários visitantes foi interrompido!"
+  - Estilização do aviso: texto centralizado, elegante, fundo suave com borda de destaque, sem ícones agressivos.
+  - Novas tentativas de login de visitantes são bloqueadas enquanto a célula estiver `BLOQUEADO`.
+- Painel do Administrador:
+  - Exibe no cabeçalho um badge em tempo real com o status atual: `VISITANTES: LIBERADO` (verde) ou `VISITANTES: BLOQUEADO` (vermelho).
+  - No modal de configuração de planilhas, disponibilizar campo de URL e botão direto "Abrir Planilha no Google" para permitir que o Admin alterne entre LIBERADO e BLOQUEADO direto no celular.
 
 ---
 
-### 4. INTEGRAÇÃO E PARSING DAS PLANILHAS GOOGLE (CSV EXPORT)
-- Utilizar links publicados da web do Google Sheets (`/pub?gid=...&single=true&output=csv`).
-- Sanitização de CSV resiliente:
-  - Remoção de BOM (`\uFEFF`).
-  - Suporte a células com quebras de linha entre aspas duplas (`"texto\ncom\nquebra"`).
-  - Limpeza e normalização dos nomes de Comandos Intermediários (ex.: converter `1 CPA`, `1o CPA`, `1º cpa` para o padrão canônico `1º CPA`).
-- Modal de Configuração de Links acessível pelo Admin para trocar ou redefinir os links das planilhas em tempo de execução sem alterar o código-fonte.
+### 4. INTEGRAÇÃO COM PLANILHAS GOOGLE (CSV EXPORT)
+- Conexão via URLs públicas do Google Sheets no formato CSV (`/pub?gid=...&single=true&output=csv`).
+- Sanitização de CSV de alta tolerância: remoção de Byte Order Mark (BOM \uFEFF), suporte a quebras de linha dentro de células entre aspas duplas, e normalização automática de nomes de unidades/comandos.
+- Fallback Offline/Contingência: Armazenamento em cache local e persistência em arquivos JSON locais para garantir que a aplicação continue funcionando mesmo se a conexão cair temporariamente.
+
+---
+
+### 5. EXPORTAÇÃO E FERRAMENTAS DE DESPACHO
+- Exportação de relatórios analíticos em PDF (paisagem A4) utilizando jsPDF + jspdf-autotable, com cabeçalho oficial, totalizadores e numeração de páginas.
+- Modais de detalhamento ("Ficha de Ocorrência" / "Ficha de Envio") com botão de cópia rápida para transferência formatada para despacho militar e WhatsApp.
+- Rodapé com identificação da equipe responsável, desenvolvedor e versão registrada do sistema.
 ```
 
 ---
 
-## ESTRUTURA DOS ARQUIVOS DO PROJETO
+# PARTE 7: CRÉDITOS E REGISTRO DE VERSÃO
 
-Caso vá criar os arquivos manualmente ou precise inspecionar a arquitetura:
-
-| Arquivo / Diretório | Responsabilidade |
-| :--- | :--- |
-| `src/types.ts` | Tipos TypeScript centrais (`LocalVotacao`, `Ocorrencia`, `FaltaEfetivo`, `ActiveTab`). |
-| `src/App.tsx` | Componente raiz, controle de autenticação, polling/sincronização de planilhas e roteamento de abas. |
-| `src/components/Header.tsx` | Cabeçalho superior com identificação institucional, contadores dinâmicos, ações rápidas e barra de navegação com 5 abas. |
-| `src/components/Footer.tsx` | Rodapé com identificação da equipe (EMG-PM/3), desenvolvedor e versão registrada do sistema (`Versão 3.0`). |
-| `src/components/LoginScreen.tsx` | Tela de autenticação com separação de perfis (`admin` e `pm3`). |
-| `src/components/LocaisTab.tsx` | Dashboard completo de locais de votação, seções, eleitores, áreas sensíveis e desmobilização. |
-| `src/components/OcorrenciasTab.tsx` | Dashboard de ocorrências e crimes, notas metodológicas, modais e cópia de histórico. |
-| `src/components/FaltasTab.tsx` | Tabela analítica de faltas, heurística de contagem de policiais faltosos e ficha com cópia formatada. |
-| `src/components/VerificacaoTab.tsx` | Painel de auditoria de duplicidades e validação de envios das OPMs (restrito Admin). |
-| `src/components/DashboardEleicoesTab.tsx` | Visualizador integrado do Google Looker Studio com suporte mobile e links diretos. |
-| `src/components/SheetConnectionModal.tsx` | Gerenciador de URLs do Google Sheets com validação, persistência e fallback. |
-| `src/services/sheetService.ts` | Parsers de CSV de alta tolerância a falhas para Locais, Ocorrências e Faltas. |
-| `src/services/pdfService.ts` | Motor de geração de relatórios em PDF com cabeçalho oficial, notas técnicas e paginação. |
-| `src/lib/csvHelper.ts` | Módulo utilitário para download com timeout, armazenamento em cache e persistência em arquivos JSON locais. |
-
----
-
-## REGRAS CRÍTICAS DE NEGÓCIO E METODOLOGIA OPERACIONAL
-
-### 1. Distinção entre "Número de Ocorrências" e "Número de Indivíduos"
-- O formulário do Google Forms registra **formulários enviados pelas OPMs**.
-- Um único envio pode narrar a condução de 1, 5 ou nenhum indivíduo (ex.: condução que não resultou em flagrante).
-- Por isso, os cards de crimes e relatórios sempre contabilizam **ocorrências** e exibem obrigatoriamente a nota metodológica:
-  > *"Os quantitativos referem-se ao número de ocorrências e registros informados pelas OPMs via formulário de ocorrência. O quantitativo exato de indivíduos conduzidos/custodiados caso existam, constam no histórico (Dinâmica do Fato) de cada registro na tabela."*
-
-### 2. Heurística de Faltas no POE
-- Policiais não devem ser contados se o texto contiver frases de normalidade como *"Sem alteração"*, *"Nenhum militar faltoso"*, *"Zero faltas"*, *"OK"*.
-- Quando há militares faltosos, o sistema busca quebras de linha ou ponto-e-vírgula e valida patentes militares ou formato de RG (`RG 12.345` ou números com 5 a 7 dígitos).
-
-### 3. Normalização de Comandos Intermediários (CPAs)
-Os Comandos Intermediários aceitos e normalizados canonicamente são:
-- `1º CPA` (Zona Central/Portuária/Sul da Capital)
-- `2º CPA` (Zona Oeste da Capital)
-- `3º CPA` (Baixada Fluminense)
-- `4º CPA` (Niterói, São Gonçalo e Região dos Lagos)
-- `5º CPA` (Sul Fluminense e Costa Verde)
-- `6º CPA` (Norte e Noroeste Fluminense)
-- `7º CPA` (Região Serrana)
-- `8º CPA` (Zona Norte da Capital e Subúrbio)
-- `CPP` (Comando de Polícia Pacificadora)
-- `COE` (Comando de Operações Especiais)
-- `CPE` (Comando de Policiamento Especializado)
-
----
-
-## CREDENCIAIS PADRÃO DO SISTEMA
-
-| Perfil | Usuário | Senha | Nível de Acesso |
-| :--- | :--- | :--- | :--- |
-| **Administrador** | `admin` | `74029jr` | Acesso total, configuração de planilhas e auditoria. |
-| **Operador PM/3** | `pm3` | `pm3` | Visualização operacional, consultas e exportação de PDF. |
-
----
-
-*(Fim do documento de replicação e documentação técnica oficial)*
+- **Sistema:** EMG-PM/3 — Planejamento e Acompanhamento Operacional (Eleições)
+- **Versão Homologada:** `Versão 3.0`
+- **Desenvolvedor:** Dev.Fiel.26
+- **Equipe Responsável:**
+  - Chefe da PM/3: Coronel Christoph
+  - Subchefe da PM/3: Ten. Coronel Moraes
+  - Encarregado: Major Zelenka
