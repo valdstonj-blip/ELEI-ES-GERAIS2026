@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Activity,
   UserX,
@@ -8,6 +7,7 @@ import {
   FileCheck2,
   Link2,
   BarChart3,
+  History,
 } from 'lucide-react';
 import { ActiveTab } from '../types';
 
@@ -29,6 +29,7 @@ interface HeaderProps {
     verificacao?: number;
     sensiveis: number;
     inconsistencias?: number;
+    primeiroTurno?: number;
   };
 }
 
@@ -179,6 +180,27 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 {counts.ocorrencias}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('primeiroTurno')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                activeTab === 'primeiroTurno'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-amber-200/90 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <History className="w-3.5 h-3.5 text-amber-400" />
+              <span>1º TURNO (OCORRÊNCIAS)</span>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  activeTab === 'primeiroTurno'
+                    ? 'bg-amber-700/80 text-white'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                }`}
+              >
+                {counts.primeiroTurno ?? 87}
               </span>
             </button>
 

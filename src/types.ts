@@ -62,6 +62,7 @@ export interface Ocorrencia {
   rg?: string;
   nomeGuerra?: string;
   email?: string;
+  informante?: string;
 
   // As 5 perguntas com respostas pré-definidas em múltipla escolha
   crimesCandidatos?: string;
@@ -135,4 +136,4 @@ export interface SheetConfig {
   lastUpdated?: string | null;
 }
 
-export type ActiveTab = 'locais' | 'ocorrencias' | 'faltas' | 'verificacao' | 'dashboard';
+export type ActiveTab = 'locais' | 'ocorrencias' | 'faltas' | 'verificacao' | 'dashboard' | 'primeiroTurno';

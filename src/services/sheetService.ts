@@ -674,11 +674,282 @@ export function parseOcorrenciasCsv(csvText: string): Ocorrencia[] {
       status: seHouverOcorrenciaDizerQual === 'Não houve' ? ('SEM ALTERAÇÃO' as const) : ('CONCLUÍDA' as const),
     };
   }).filter((o) => {
-    // Exclui estritamente registros do 1º Turno (03/10 e 04/10)
+    // Exclui estritamente registros do 1º Turno (03/10 e 04/10) para a base do 2º Turno
     const s = `${o.carimbo || ''} ${o.servicoDia || ''} ${o.dataHoraFato || ''} ${o.dinamica || ''}`.toLowerCase();
     const is1oTurno = (s.includes('03/10') || s.includes('03out') || s.includes('04/10') || s.includes('04out')) &&
                       !(s.includes('24/10') || s.includes('25/10') || s.includes('24out') || s.includes('25out'));
     return !is1oTurno;
+  });
+}
+
+/**
+ * Parser dedicado exclusivamente ao 1º Turno (03 e 04 de Outubro de 2026)
+ * Mantém todos os registros de 03/10 e 04/10 sem qualquer filtro de exclusão
+ */
+export function parseOcorrencias1TurnoCsv(csvText: string): Ocorrencia[] {
+  const result = Papa.parse(csvText, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    transformHeader: (header) => header.trim(),
+  });
+
+  if (!result.data || result.data.length === 0) return [];
+
+  const rows = result.data as any[];
+
+  return rows.map((row, index) => {
+    const keys = Object.keys(row);
+
+    const carimbo = String(
+      row['Carimbo de data/hora'] ||
+      row['Carimbo de data e hora'] ||
+      row['Data/Hora'] ||
+      row['CARIMBO'] ||
+      new Date().toLocaleString('pt-BR')
+    ).trim();
+
+    let comandoIntermediario = '1° CPA';
+    let opm = '';
+    let posto = '';
+    let rg = '';
+    let nomeGuerra = '';
+    let email = '';
+
+    for (const k of keys) {
+      const upper = k.toUpperCase().trim();
+      const val = String(row[k] || '').trim();
+
+      if (
+        upper.includes('COMANDO INTERMEDIÁRIO') ||
+        upper.includes('COMANDO INTERMEDIARIO') ||
+        upper === 'CPA'
+      ) {
+        comandoIntermediario = normalizeCpaName(val);
+      }
+      if (
+        upper === 'OPM' ||
+        upper === 'UOP' ||
+        upper.includes('BATALHÃO') ||
+        upper.includes('BATALHAO')
+      ) {
+        opm = val;
+      }
+      if (!posto && (upper === 'POSTO' || upper === 'GRADUAÇÃO' || upper === 'POSTO/GRADUAÇÃO')) {
+        posto = val;
+      }
+      if (!rg && (upper === 'RG' || upper === 'MATRÍCULA' || upper === 'MATRICULA')) {
+        rg = val;
+      }
+      if (!nomeGuerra && (upper === 'NOME DE GUERRA' || upper === 'NOME GUERRA' || upper === 'GUERRA')) {
+        nomeGuerra = val;
+      }
+      if (!email && (upper.includes('EMAIL') || upper.includes('E-MAIL'))) {
+        email = val;
+      }
+    }
+
+    let crimesCandidatos = 'Não houve';
+    let crimesLocaisVotacao = 'Não houve';
+    let crimesEleitorais = 'Não houve';
+    let incidentesSeguranca = 'Não houve';
+    let prisoesApreensoes = 'Não houve';
+
+    for (const k of keys) {
+      const upper = k.toUpperCase();
+      const val = String(row[k] || '').trim();
+
+      if (upper.includes('CONTRA CANDIDATOS') || (upper.includes('CRIMES') && upper.includes('CANDIDATO'))) {
+        crimesCandidatos = val || 'Não houve';
+      } else if (
+        upper.includes('LOCAIS DE VOTAÇÃO') ||
+        upper.includes('LOCAIS DE VOTACAO') ||
+        upper.includes('APURAÇÃO') ||
+        upper.includes('APURACAO')
+      ) {
+        crimesLocaisVotacao = val || 'Não houve';
+      } else if (
+        upper === 'CRIMES ELEITORAIS' ||
+        (upper.includes('ELEITORAIS') && !upper.includes('COMUNS') && !upper.includes('INCIDENTES'))
+      ) {
+        crimesEleitorais = val || 'Não houve';
+      } else if (
+        upper.includes('INCIDENTES') ||
+        upper.includes('DEFESA SOCIAL') ||
+        (upper.includes('SEGURANÇA PÚBLICA') && upper.includes('ENTORNO'))
+      ) {
+        incidentesSeguranca = val || 'Não houve';
+      } else if (
+        upper.includes('PRISÕ') ||
+        upper.includes('PRISOES') ||
+        upper.includes('APREENS')
+      ) {
+        prisoesApreensoes = val || 'Não houve';
+      }
+    }
+
+    const crimesRegistrados: string[] = [];
+    if (!isSemAlteracao(crimesCandidatos)) crimesRegistrados.push(crimesCandidatos);
+    if (!isSemAlteracao(crimesLocaisVotacao)) crimesRegistrados.push(crimesLocaisVotacao);
+    if (!isSemAlteracao(crimesEleitorais)) crimesRegistrados.push(crimesEleitorais);
+    if (!isSemAlteracao(incidentesSeguranca)) crimesRegistrados.push(incidentesSeguranca);
+    if (!isSemAlteracao(prisoesApreensoes)) crimesRegistrados.push(prisoesApreensoes);
+
+    for (const k of keys) {
+      const upper = k.toUpperCase();
+      if (
+        upper.includes('SE HOUVER') ||
+        upper.includes('SE HOUVER A OCORRÊNCIA') ||
+        upper.includes('DIZER QUAL É') ||
+        upper.includes('DIZER QUAL')
+      ) {
+        const val = String(row[k] || '').trim();
+        if (val && !isSemAlteracao(val) && !crimesRegistrados.includes(val)) {
+          crimesRegistrados.push(val);
+          break;
+        }
+      }
+    }
+
+    const seHouverOcorrenciaDizerQual =
+      crimesRegistrados.length > 0 ? crimesRegistrados.join('; ') : 'Não houve';
+
+    let categoria = 'Crimes comuns nos locais de votação';
+    if (!isSemAlteracao(crimesLocaisVotacao)) {
+      categoria = 'Crimes comuns nos locais de votação';
+    } else if (!isSemAlteracao(crimesCandidatos)) {
+      categoria = 'Crimes comuns contra candidatos';
+    } else if (!isSemAlteracao(crimesEleitorais)) {
+      categoria = 'Crimes eleitorais';
+    } else if (!isSemAlteracao(incidentesSeguranca)) {
+      categoria = 'Incidentes de segurança pública';
+    } else if (!isSemAlteracao(prisoesApreensoes)) {
+      categoria = 'Prisões e apreensões no entorno';
+    }
+
+    let local = '';
+    let hora = '';
+    let bopm = '';
+    let ro = '';
+    let dinamica = '';
+    let servicoDia = '';
+
+    for (const k of keys) {
+      const upper = k.toUpperCase().trim();
+      const val = String(row[k] || '').trim();
+      if (!val) continue;
+
+      if (!servicoDia && (upper.includes('SERVIÇO DO DIA') || upper.includes('SERVICO DO DIA'))) {
+        servicoDia = val;
+      }
+      if (upper.includes('EMAIL') || upper.includes('E-MAIL')) continue;
+
+      if (
+        !local &&
+        (upper.includes('LOCAL DA OCORRÊNCIA') ||
+          upper.includes('LOCAL DA OCORRENCIA') ||
+          upper.includes('LOCAL DO FATO') ||
+          upper === 'LOCAL' ||
+          upper.includes('LOCAL DE VOTAÇÃO') ||
+          upper.includes('LOCALIDADE') ||
+          (upper.includes('ENDEREÇO') && !upper.includes('EMAIL')))
+      ) {
+        local = val;
+      }
+      if (
+        !hora &&
+        (upper.includes('HORA DA OCORRÊNCIA') ||
+          upper.includes('HORA DA OCORRENCIA') ||
+          upper.includes('HORA DO FATO') ||
+          upper === 'HORA' ||
+          upper === 'HORÁRIO' ||
+          upper === 'HORARIO')
+      ) {
+        hora = val;
+      }
+      if (!bopm && (upper.includes('BOPM') || upper.includes('BO-PM') || upper.includes('BO PM'))) {
+        bopm = val;
+      }
+      if (
+        !ro &&
+        (upper === 'RO' ||
+          upper.includes('R.O.') ||
+          upper.includes('R.O') ||
+          upper.includes('Nº RO') ||
+          upper.includes('REGISTRO DE OCORRÊNCIA') ||
+          upper.includes('REGISTRO DE OCORRENCIA') ||
+          upper === 'DP')
+      ) {
+        ro = val;
+      }
+      if (
+        !dinamica &&
+        (upper.includes('DINÂMICA') ||
+          upper.includes('DINAMICA') ||
+          upper.includes('HISTÓRICO') ||
+          upper.includes('HISTORICO') ||
+          upper.includes('DESCRIÇÃO') ||
+          upper.includes('RELATO'))
+      ) {
+        dinamica = val;
+      }
+    }
+
+    if (!local) local = opm ? `Área de atuação do ${opm}` : 'Local de Votação';
+    if (!hora) {
+      const timeMatch = carimbo.match(/(\d{1,2}:\d{2}(?::\d{2})?)/);
+      hora = timeMatch ? timeMatch[1] : '11:00';
+    }
+    if (!bopm) bopm = 'Não informado';
+    if (!ro) ro = 'Não informado';
+    if (!dinamica) {
+      dinamica = seHouverOcorrenciaDizerQual !== 'Não houve'
+        ? `${seHouverOcorrenciaDizerQual} registrado no local.`
+        : 'Sem alterações registradas no local.';
+    }
+
+    const cpa = comandoIntermediario;
+    const uop = opm || 'UOP';
+    const tipo = seHouverOcorrenciaDizerQual;
+
+    return {
+      id: `oc-1t-${index + 1}`,
+      carimbo,
+      comandoIntermediario,
+      opm: uop,
+      servicoDia: servicoDia || undefined,
+
+      posto: posto || undefined,
+      rg: rg || undefined,
+      nomeGuerra: nomeGuerra || undefined,
+      email: email || undefined,
+
+      crimesCandidatos,
+      crimesLocaisVotacao,
+      crimesEleitorais,
+      incidentesSeguranca,
+      prisoesApreensoes,
+
+      crimesRegistrados,
+      seHouverOcorrenciaDizerQual,
+
+      local,
+      hora,
+      bopm,
+      ro,
+      dinamica,
+
+      cpa,
+      uop,
+      bairro: local,
+      localidade: local,
+      categoria,
+      tipo,
+      dataHoraFato: `${carimbo.split(' ')[0] || ''} ${hora}`.trim(),
+      historico: dinamica,
+      providencias: `BOPM: ${bopm} | RO: ${ro}`,
+      envolvidos: 'Em apuração',
+      status: seHouverOcorrenciaDizerQual === 'Não houve' ? ('SEM ALTERAÇÃO' as const) : ('CONCLUÍDA' as const),
+    };
   });
 }
 

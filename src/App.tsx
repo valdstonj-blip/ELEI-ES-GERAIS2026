@@ -27,6 +27,7 @@ import { OcorrenciasTab } from './components/OcorrenciasTab';
 import { FaltasTab, countPoliciaisInText } from './components/FaltasTab';
 import { VerificacaoTab } from './components/VerificacaoTab';
 import { DashboardEleicoesTab } from './components/DashboardEleicoesTab';
+import { Ocorrencias1TurnoTab } from './components/Ocorrencias1TurnoTab';
 import { SheetConnectionModal } from './components/SheetConnectionModal';
 import { runFaltasAudit } from './services/faltasAuditService';
 
@@ -418,6 +419,7 @@ export default function App() {
             counts={{
               locais: locais.length,
               ocorrencias: countOcorrencias2oTurno,
+              primeiroTurno: 87,
               faltas: totalFaltosos,
               verificacao: isAdmin ? totalFaltosos : undefined,
               sensiveis: locais.filter((l) => isSim(l.areaSensivel)).length,
@@ -490,6 +492,8 @@ export default function App() {
             isAdmin={isAdmin}
           />
         )}
+
+        {activeTab === 'primeiroTurno' && <Ocorrencias1TurnoTab />}
 
         {activeTab === 'faltas' && (
           <FaltasTab

@@ -830,11 +830,12 @@ function isNaoHouve(val: string | undefined): boolean {
 }
 
 export interface OcorrenciasPdfOptions {
-  dia?: 'TODOS' | '03OUT' | '04OUT' | string;
+  dia?: 'TODOS' | '03OUT' | '04OUT' | '24OUT' | '25OUT' | string;
   cpa?: string;
   opm?: string;
   crimeFilter?: string;
   search?: string;
+  turno?: '1TURNO' | '2TURNO';
 }
 
 /**
@@ -933,19 +934,24 @@ export function exportOcorrenciasPdf(
 
   const total = filtered.length;
 
+  const is1Turno = options.turno === '1TURNO' || diaFilter === '03OUT' || diaFilter === '04OUT';
+
   const diaLabel =
     diaFilter === '24OUT'
       ? 'DIA 24OUT26 (SÁBADO - 2º TURNO)'
       : diaFilter === '25OUT'
       ? 'DIA 25OUT26 (DOMINGO - 2º TURNO)'
       : diaFilter === '03OUT'
-      ? 'DIA 03OUT26 (1º TURNO)'
+      ? 'DIA 03OUT26 (SÁBADO - 1º TURNO)'
       : diaFilter === '04OUT'
-      ? 'DIA 04OUT26 (1º TURNO)'
+      ? 'DIA 04OUT26 (DOMINGO - 1º TURNO)'
+      : is1Turno
+      ? '1º TURNO (03 E 04 DE OUTUBRO DE 2026)'
       : '2º TURNO (24 E 25 DE OUTUBRO DE 2026)';
 
   // Detalhamento dos filtros para o subtítulo do relatório
   const filterParts: string[] = [];
+  if (is1Turno && !diaFilter.includes('OUT')) filterParts.push('1º Turno');
   if (cpaFilter !== 'TODOS') filterParts.push(`Comando: ${cpaFilter}`);
   if (opmFilter !== 'TODAS') filterParts.push(`OPM: ${opmFilter}`);
   filterParts.push(`Período: ${diaLabel}`);
@@ -953,12 +959,14 @@ export function exportOcorrenciasPdf(
 
   // Nome do arquivo de saída
   const fileParts = ['RELATORIO_OCORRENCIAS'];
+  if (is1Turno) fileParts.push('1º_TURNO');
   if (cpaFilter !== 'TODOS') fileParts.push(cpaFilter.replace(/[^A-Za-z0-9]/g, '_'));
   if (opmFilter !== 'TODAS') fileParts.push(opmFilter.replace(/[^A-Za-z0-9]/g, '_'));
   if (diaFilter === '24OUT') fileParts.push('24OUT26');
   else if (diaFilter === '25OUT') fileParts.push('25OUT26');
   else if (diaFilter === '03OUT') fileParts.push('03OUT26');
   else if (diaFilter === '04OUT') fileParts.push('04OUT26');
+  else if (is1Turno) fileParts.push('03_04_OUT');
   else fileParts.push('2º_TURNO_24_25_OUT');
   const filename = `${fileParts.filter(Boolean).join('_').replace(/__+/g, '_')}.pdf`;
 
@@ -1345,6 +1353,16 @@ export function exportOcorrenciasPdf(
   );
 
   doc.save(filename);
+}
+
+/**
+ * Emite especificamente o Relatório Oficial de Ocorrências do 1º Turno (03 e 04 de Outubro de 2026)
+ */
+export function exportOcorrencias1TurnoPdf(
+  ocorrencias: Ocorrencia[],
+  options?: OcorrenciasPdfOptions
+) {
+  return exportOcorrenciasPdf(ocorrencias, { ...options, turno: '1TURNO' });
 }
 
 export interface FaltasPdfOptions {
