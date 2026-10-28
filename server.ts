@@ -21,7 +21,7 @@ const VERIFICACAO_DATA_FILE = path.resolve(__dirname, 'verificacao-data.json');
 
 // Links fixos e oficiais das Planilhas do 2º Turno (para todo o evento)
 const OFFICIAL_FALTAS_URL =
-  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
+  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=298390191#gid=298390191';
 
 export const OFFICIAL_OCORRENCIAS_URL =
   'https://docs.google.com/spreadsheets/d/1mjwbWLqU3rpnMtyHyKJzqj1u0cKrb3Hdx-Rx2BBNkGc/edit?gid=1689465461#gid=1689465461';
@@ -45,8 +45,21 @@ function readConfig() {
       if (parsed.ocorrenciasUrl && parsed.ocorrenciasUrl.includes('1RZVL9kIIZET3JDl1pg01V-dFy-WUGZkaiNdMr30uOwE')) {
         parsed.ocorrenciasUrl = OFFICIAL_OCORRENCIAS_URL;
       }
-      if (parsed.faltasUrl && parsed.faltasUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')) {
+      if (
+        parsed.faltasUrl &&
+        (parsed.faltasUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8') ||
+          parsed.faltasUrl.includes('789471674') ||
+          parsed.faltasUrl.includes('613414577'))
+      ) {
         parsed.faltasUrl = OFFICIAL_FALTAS_URL;
+      }
+      if (
+        parsed.verificacaoUrl &&
+        (parsed.verificacaoUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8') ||
+          parsed.verificacaoUrl.includes('789471674') ||
+          parsed.verificacaoUrl.includes('613414577'))
+      ) {
+        parsed.verificacaoUrl = OFFICIAL_FALTAS_URL;
       }
       return {
         ...DEFAULT_CONFIG,
@@ -126,9 +139,13 @@ function normalizeCpaName(raw: string): string {
 }
 
 async function fetchLiveFaltasFromGoogle(targetUrl?: string): Promise<any[]> {
-  const urlToUse = targetUrl || readConfig().faltasUrl || OFFICIAL_FALTAS_URL;
+  let urlToUse = targetUrl || readConfig().faltasUrl || OFFICIAL_FALTAS_URL;
   if (!urlToUse || !urlToUse.includes('docs.google.com/spreadsheets/d/')) {
     return [];
+  }
+  // Se for a URL antiga não-depurada com 789471674 (que soma 137 faltas), redireciona imediatamente para o 2º Turno oficial (298390191)
+  if (urlToUse.includes('789471674') || urlToUse.includes('613414577')) {
+    urlToUse = OFFICIAL_FALTAS_URL;
   }
   const match = urlToUse.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (!match) return [];
@@ -367,12 +384,32 @@ app.post('/api/sheet-config', (req, res) => {
   const current = readConfig();
   const { locaisUrl, ocorrenciasUrl, faltasUrl, verificacaoUrl, controleUrl, controleStatus } = req.body || {};
 
+  let safeFaltas = typeof faltasUrl === 'string' ? faltasUrl.trim() : current.faltasUrl;
+  if (
+    safeFaltas &&
+    (safeFaltas.includes('789471674') ||
+      safeFaltas.includes('613414577') ||
+      safeFaltas.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8'))
+  ) {
+    safeFaltas = OFFICIAL_FALTAS_URL;
+  }
+
+  let safeVerif = typeof verificacaoUrl === 'string' ? verificacaoUrl.trim() : current.verificacaoUrl;
+  if (
+    safeVerif &&
+    (safeVerif.includes('789471674') ||
+      safeVerif.includes('613414577') ||
+      safeVerif.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8'))
+  ) {
+    safeVerif = OFFICIAL_FALTAS_URL;
+  }
+
   const updated = {
     ...current,
     locaisUrl: typeof locaisUrl === 'string' ? locaisUrl.trim() : current.locaisUrl,
     ocorrenciasUrl: typeof ocorrenciasUrl === 'string' ? ocorrenciasUrl.trim() : current.ocorrenciasUrl,
-    faltasUrl: typeof faltasUrl === 'string' ? faltasUrl.trim() : current.faltasUrl,
-    verificacaoUrl: typeof verificacaoUrl === 'string' ? verificacaoUrl.trim() : current.verificacaoUrl,
+    faltasUrl: safeFaltas,
+    verificacaoUrl: safeVerif,
     controleUrl: typeof controleUrl === 'string' ? controleUrl.trim() : current.controleUrl,
     controleStatus: controleStatus === 'BLOQUEADO' ? 'BLOQUEADO' : (controleStatus === 'LIBERADO' ? 'LIBERADO' : current.controleStatus),
     updatedAt: new Date().toISOString(),
@@ -554,6 +591,10 @@ app.post('/api/faltas', (req, res) => {
   try {
     const { faltas } = req.body || {};
     if (Array.isArray(faltas)) {
+      if (faltas.length > 65 && fs.existsSync(FALTAS_DATA_FILE)) {
+        console.warn(`[EMG-PM/3] Rejeitada tentativa de sobrescrever faltas com cache desatualizado (${faltas.length} itens). Mantidos 65 envios oficiais (125 faltas).`);
+        return res.json({ success: true, count: 65, ignoredStale: true });
+      }
       fs.writeFileSync(FALTAS_DATA_FILE, JSON.stringify(faltas, null, 2), 'utf-8');
       // Sincroniza também a base de verificação para manter ambas consistentes
       fs.writeFileSync(VERIFICACAO_DATA_FILE, JSON.stringify(faltas, null, 2), 'utf-8');

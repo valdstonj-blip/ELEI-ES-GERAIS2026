@@ -18,9 +18,9 @@ export const DEFAULT_SHEET_URL =
 export const DEFAULT_OCORRENCIAS_URL =
   'https://docs.google.com/spreadsheets/d/1mjwbWLqU3rpnMtyHyKJzqj1u0cKrb3Hdx-Rx2BBNkGc/edit?gid=1689465461#gid=1689465461';
 export const DEFAULT_FALTAS_URL =
-  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
+  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=298390191#gid=298390191';
 export const DEFAULT_VERIFICACAO_URL =
-  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=789471674#gid=789471674';
+  'https://docs.google.com/spreadsheets/d/1AyyegbNXdVKuo1zeuvh-MemyWfkaxUNuqxwbHtPX4p4/edit?gid=298390191#gid=298390191';
 export const DEFAULT_CONTROLE_URL =
   'https://docs.google.com/spreadsheets/d/1mFNqir2Y3Dwxt2WKQDMhCgfp2CgS1pFGfR_o5cwpw_w/edit?gid=0#gid=0';
 
@@ -92,6 +92,26 @@ try {
   OLD_KEYS_TO_PURGE.forEach((k) => {
     localStorage.removeItem(k);
   });
+  // Purga imediata se o navegador ou celular armazenou a URL com gid 789471674 (137 faltas brutas)
+  const stFaltasUrl = localStorage.getItem(STORAGE_KEYS.FALTAS_URL);
+  if (stFaltasUrl && (stFaltasUrl.includes('789471674') || stFaltasUrl.includes('613414577') || stFaltasUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8'))) {
+    localStorage.removeItem(STORAGE_KEYS.FALTAS_URL);
+    localStorage.removeItem(STORAGE_KEYS.FALTAS);
+  }
+  const stVerifUrl = localStorage.getItem(STORAGE_KEYS.VERIFICACAO_URL);
+  if (stVerifUrl && (stVerifUrl.includes('789471674') || stVerifUrl.includes('613414577') || stVerifUrl.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8'))) {
+    localStorage.removeItem(STORAGE_KEYS.VERIFICACAO_URL);
+    localStorage.removeItem(STORAGE_KEYS.VERIFICACAO);
+  }
+  // Purga cache antigo de faltas caso tenha mais de 65 registros (o 2º turno depurado tem exatamente 65 registros = 125 faltas)
+  const stFaltas = localStorage.getItem(STORAGE_KEYS.FALTAS);
+  if (stFaltas) {
+    const p = JSON.parse(stFaltas);
+    if (Array.isArray(p) && p.length > 65) {
+      localStorage.removeItem(STORAGE_KEYS.FALTAS);
+      localStorage.removeItem(STORAGE_KEYS.VERIFICACAO);
+    }
+  }
 } catch {}
 
 function pushConfigToServer(partial: {
@@ -166,19 +186,34 @@ export const CsvHelper = {
           this.setOcorrenciasSheetUrl(DEFAULT_OCORRENCIAS_URL, true);
         }
 
-        // Sincroniza Faltas (rejeita link do 1º turno)
-        if (serverConfig.faltasUrl && typeof serverConfig.faltasUrl === 'string' && serverConfig.faltasUrl.startsWith('http') && !serverConfig.faltasUrl.includes('613414577')) {
+        // Sincroniza Faltas (rejeita link do 1º turno e aba bruta 789471674 com 137 faltas)
+        const isBadFaltasUrl = (u?: string | null) =>
+          !u ||
+          !u.startsWith('http') ||
+          u.includes('613414577') ||
+          u.includes('789471674') ||
+          u.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8');
+
+        if (serverConfig.faltasUrl && !isBadFaltasUrl(serverConfig.faltasUrl)) {
           this.setFaltasSheetUrl(serverConfig.faltasUrl, false);
-        } else if (localFaltas && localFaltas.startsWith('http') && !localFaltas.includes('613414577')) {
+        } else if (localFaltas && !isBadFaltasUrl(localFaltas)) {
           pushPayload.faltasUrl = localFaltas;
+          needPush = true;
+        } else {
+          this.setFaltasSheetUrl(DEFAULT_FALTAS_URL, false);
+          pushPayload.faltasUrl = DEFAULT_FALTAS_URL;
           needPush = true;
         }
 
-        // Sincroniza Verificação
-        if (serverConfig.verificacaoUrl && typeof serverConfig.verificacaoUrl === 'string' && serverConfig.verificacaoUrl.startsWith('http')) {
+        // Sincroniza Verificação (rejeita links antigos e abas brutas)
+        if (serverConfig.verificacaoUrl && !isBadFaltasUrl(serverConfig.verificacaoUrl)) {
           this.setVerificacaoSheetUrl(serverConfig.verificacaoUrl, false);
-        } else if (localVerif && localVerif.startsWith('http')) {
+        } else if (localVerif && !isBadFaltasUrl(localVerif)) {
           pushPayload.verificacaoUrl = localVerif;
+          needPush = true;
+        } else {
+          this.setVerificacaoSheetUrl(DEFAULT_VERIFICACAO_URL, false);
+          pushPayload.verificacaoUrl = DEFAULT_VERIFICACAO_URL;
           needPush = true;
         }
 
@@ -455,21 +490,37 @@ export const CsvHelper = {
   getFaltasSheetUrl(): string {
     try {
       const val = localStorage.getItem(STORAGE_KEYS.FALTAS_URL);
-      if (val && val.trim().startsWith('http') && !val.includes('613414577')) {
+      if (
+        val &&
+        val.trim().startsWith('http') &&
+        !val.includes('613414577') &&
+        !val.includes('789471674') &&
+        !val.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')
+      ) {
         SHEET_URLS.PLANILHA_3_FALTAS = val.trim();
         return val.trim();
       }
     } catch {}
 
-    if (SHEET_URLS.PLANILHA_3_FALTAS && SHEET_URLS.PLANILHA_3_FALTAS.trim().startsWith('http') && !SHEET_URLS.PLANILHA_3_FALTAS.includes('613414577')) {
+    if (
+      SHEET_URLS.PLANILHA_3_FALTAS &&
+      SHEET_URLS.PLANILHA_3_FALTAS.trim().startsWith('http') &&
+      !SHEET_URLS.PLANILHA_3_FALTAS.includes('613414577') &&
+      !SHEET_URLS.PLANILHA_3_FALTAS.includes('789471674') &&
+      !SHEET_URLS.PLANILHA_3_FALTAS.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')
+    ) {
       return SHEET_URLS.PLANILHA_3_FALTAS.trim();
     }
+    SHEET_URLS.PLANILHA_3_FALTAS = DEFAULT_FALTAS_URL;
     return DEFAULT_FALTAS_URL;
   },
 
   setFaltasSheetUrl(url: string, pushToServer = true) {
     if (url && url.trim().startsWith('http')) {
-      const clean = url.trim();
+      let clean = url.trim();
+      if (clean.includes('789471674') || clean.includes('613414577') || clean.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')) {
+        clean = DEFAULT_FALTAS_URL;
+      }
       try {
         localStorage.setItem(STORAGE_KEYS.FALTAS_URL, clean);
       } catch {}
@@ -489,8 +540,11 @@ export const CsvHelper = {
       const raw = localStorage.getItem(STORAGE_KEYS.FALTAS);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 65) {
           return parsed;
+        }
+        if (Array.isArray(parsed) && parsed.length > 65) {
+          localStorage.removeItem(STORAGE_KEYS.FALTAS);
         }
       }
     } catch (e) {
@@ -542,21 +596,37 @@ export const CsvHelper = {
   getVerificacaoSheetUrl(): string {
     try {
       const val = localStorage.getItem(STORAGE_KEYS.VERIFICACAO_URL);
-      if (val && val.trim().startsWith('http')) {
+      if (
+        val &&
+        val.trim().startsWith('http') &&
+        !val.includes('613414577') &&
+        !val.includes('789471674') &&
+        !val.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')
+      ) {
         SHEET_URLS.PLANILHA_4_VERIFICACAO = val.trim();
         return val.trim();
       }
     } catch {}
 
-    if (SHEET_URLS.PLANILHA_4_VERIFICACAO && SHEET_URLS.PLANILHA_4_VERIFICACAO.trim().startsWith('http')) {
+    if (
+      SHEET_URLS.PLANILHA_4_VERIFICACAO &&
+      SHEET_URLS.PLANILHA_4_VERIFICACAO.trim().startsWith('http') &&
+      !SHEET_URLS.PLANILHA_4_VERIFICACAO.includes('613414577') &&
+      !SHEET_URLS.PLANILHA_4_VERIFICACAO.includes('789471674') &&
+      !SHEET_URLS.PLANILHA_4_VERIFICACAO.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')
+    ) {
       return SHEET_URLS.PLANILHA_4_VERIFICACAO.trim();
     }
+    SHEET_URLS.PLANILHA_4_VERIFICACAO = DEFAULT_VERIFICACAO_URL;
     return DEFAULT_VERIFICACAO_URL;
   },
 
   setVerificacaoSheetUrl(url: string, pushToServer = true) {
     if (url && url.trim().startsWith('http')) {
-      const clean = url.trim();
+      let clean = url.trim();
+      if (clean.includes('789471674') || clean.includes('613414577') || clean.includes('1RySRUm3i_GZPsXzAc5y9oa0onfeH1dFYhJMUnKZPSN8')) {
+        clean = DEFAULT_VERIFICACAO_URL;
+      }
       try {
         localStorage.setItem(STORAGE_KEYS.VERIFICACAO_URL, clean);
       } catch {}
@@ -576,8 +646,11 @@ export const CsvHelper = {
       const raw = localStorage.getItem(STORAGE_KEYS.VERIFICACAO);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 65) {
           return parsed;
+        }
+        if (Array.isArray(parsed) && parsed.length > 65) {
+          localStorage.removeItem(STORAGE_KEYS.VERIFICACAO);
         }
       }
     } catch (e) {

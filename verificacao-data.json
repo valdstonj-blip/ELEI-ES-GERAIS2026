@@ -158,7 +158,7 @@
     "nomeGuerra": "Guilherme",
     "comandoIntermediario": "1º CPA",
     "opm": "22º BPM",
-    "faltasPoe": "SUB TEN  RICARDO DE PAULA SOUZA RG 72.363 - 22º BPM\n\n3º SGT DANIEL DE SOUZA BERALDE RG 102254 - 5º BPM\n\n3º SGT FABIO DA SILVA GOMES RG 103497 - 39º BPM\n\n3º SGT VICTOR SALY SARAIVA RG 104528 - ASCOM",
+    "faltasPoe": "SUB TEN  RICARDO DE PAULA SOUZA RG 72.363 - 22º BPM\n3º SGT DANIEL DE SOUZA BERALDE RG 102254 - 5º BPM\n3º SGT FABIO DA SILVA GOMES RG 103497 - 39º BPM\n3º SGT VICTOR SALY SARAIVA RG 104528 - ASCOM",
     "dispensasPoe": "sem alteração",
     "email": "p3.22bpmpmerj@gmail.com",
     "data": "25/10/2026",
@@ -167,7 +167,7 @@
     "opmOrigem": "1º CPA / 22º BPM",
     "uopDestino": "22º BPM",
     "localVotacao": "POE - Escala Operacional",
-    "motivo": "SUB TEN  RICARDO DE PAULA SOUZA RG 72.363 - 22º BPM\n\n3º SGT DANIEL DE SOUZA BERALDE RG 102254 - 5º BPM\n\n3º SGT FABIO DA SILVA GOMES RG 103497 - 39º BPM\n\n3º SGT VICTOR SALY SARAIVA RG 104528 - ASCOM",
+    "motivo": "SUB TEN  RICARDO DE PAULA SOUZA RG 72.363 - 22º BPM\n3º SGT DANIEL DE SOUZA BERALDE RG 102254 - 5º BPM\n3º SGT FABIO DA SILVA GOMES RG 103497 - 39º BPM\n3º SGT VICTOR SALY SARAIVA RG 104528 - ASCOM",
     "substituto": "sem alteração",
     "status": "REGISTRADO",
     "cpa": "1º CPA",
@@ -183,7 +183,7 @@
     "nomeGuerra": "Macena",
     "comandoIntermediario": "1º CPA",
     "opm": "2º BPM",
-    "faltasPoe": "2º SGT PM RG 87.096 DAS NEVES - 2º BPM / CB PM RG 104.996 DEBAQUER - 2º BPM",
+    "faltasPoe": "2º SGT PM RG 87.096 DAS NEVES - 2º BPM                                                                                                                              CB PM RG 104.996 DEBAQUER - 2º BPM",
     "dispensasPoe": "sem alteração",
     "email": "p3_2bpm@pmerj.rj.gov.br",
     "data": "25/10/2026",
@@ -192,7 +192,7 @@
     "opmOrigem": "1º CPA / 2º BPM",
     "uopDestino": "2º BPM",
     "localVotacao": "POE - Escala Operacional",
-    "motivo": "2º SGT PM RG 87.096 DAS NEVES - 2º BPM / CB PM RG 104.996 DEBAQUER - 2º BPM",
+    "motivo": "2º SGT PM RG 87.096 DAS NEVES - 2º BPM                                                                                                                              CB PM RG 104.996 DEBAQUER - 2º BPM",
     "substituto": "sem alteração",
     "status": "REGISTRADO",
     "cpa": "1º CPA",
@@ -1233,7 +1233,7 @@
     "nomeGuerra": "dantas",
     "comandoIntermediario": "4º CPA",
     "opm": "12º BPM",
-    "faltasPoe": "SUBTEN 69974 SAMPAIO (12 BPM), \n\n1º SGT PM 78042 FÁBIO (12 BPM), \n\nCB PM 105414 LIMA (12 BPM),",
+    "faltasPoe": "SUBTEN 69974 SAMPAIO (12 BPM), \n1º SGT PM 78042 FÁBIO (12 BPM), \nCB PM 105414 LIMA (12 BPM),",
     "dispensasPoe": "sem alteração",
     "email": "12bpm.p3.planejamento@gmail.com",
     "data": "24/10/2026",
@@ -1242,7 +1242,7 @@
     "opmOrigem": "4º CPA / 12º BPM",
     "uopDestino": "12º BPM",
     "localVotacao": "POE - Escala Operacional",
-    "motivo": "SUBTEN 69974 SAMPAIO (12 BPM), \n\n1º SGT PM 78042 FÁBIO (12 BPM), \n\nCB PM 105414 LIMA (12 BPM),",
+    "motivo": "SUBTEN 69974 SAMPAIO (12 BPM), \n1º SGT PM 78042 FÁBIO (12 BPM), \nCB PM 105414 LIMA (12 BPM),",
     "substituto": "sem alteração",
     "status": "REGISTRADO",
     "cpa": "4º CPA",
@@ -1451,31 +1451,6 @@
   },
   {
     "id": "falta-resp-59",
-    "carimbo": "25/10/2026 20:31:07",
-    "servicoDia": "25OUT26 ( DOMINGO - 08:00 até ao Término )",
-    "posto": "MAJ PM",
-    "rg": "65439",
-    "nomeGuerra": "GUIMARÃES",
-    "comandoIntermediario": "5º CPA",
-    "opm": "33º BPM",
-    "faltasPoe": "CB  HERCULES SOUZA - RG 109155 - 33° BPM",
-    "dispensasPoe": "sem alteração",
-    "email": "p3_33bpm@pmerj.rj.gov.br",
-    "data": "25/10/2026",
-    "turno": "25OUT26 ( DOMINGO - 08:00 até ao Término )",
-    "postoGrad": "MAJ PM",
-    "opmOrigem": "5º CPA / 33º BPM",
-    "uopDestino": "33º BPM",
-    "localVotacao": "POE - Escala Operacional",
-    "motivo": "CB  HERCULES SOUZA - RG 109155 - 33° BPM",
-    "substituto": "sem alteração",
-    "status": "REGISTRADO",
-    "cpa": "5º CPA",
-    "tipoRegistro": "FALTA",
-    "informante": "MAJ PM GUIMARÃES (RG: 65439)"
-  },
-  {
-    "id": "falta-resp-60",
     "carimbo": "25/10/2026 17:43:46",
     "servicoDia": "25OUT26 ( DOMINGO - 08:00 até ao Término )",
     "posto": "CAP PM",
@@ -1500,7 +1475,7 @@
     "informante": "CAP PM Vargas (RG: 84321)"
   },
   {
-    "id": "falta-resp-61",
+    "id": "falta-resp-60",
     "carimbo": "25/10/2026 19:22:44",
     "servicoDia": "25OUT26 ( DOMINGO - 08:00 até ao Término )",
     "posto": "CAP PM",
@@ -1525,7 +1500,7 @@
     "informante": "CAP PM Andrade (RG: 83.952)"
   },
   {
-    "id": "falta-resp-62",
+    "id": "falta-resp-61",
     "carimbo": "25/10/2026 08:08:47",
     "servicoDia": "24OUT26 ( SÁBADO/DOMINGO - 20:00 até ás 08:00 hs de DOMINGO )",
     "posto": "MAJ PM",
@@ -1550,7 +1525,7 @@
     "informante": "MAJ PM Luciano (RG: 80916)"
   },
   {
-    "id": "falta-resp-63",
+    "id": "falta-resp-62",
     "carimbo": "25/10/2026 11:52:25",
     "servicoDia": "25OUT26 ( DOMINGO - 08:00 até ao Término )",
     "posto": "MAJ PM",
@@ -1575,7 +1550,7 @@
     "informante": "MAJ PM LIMA E SILVA (RG: 71821)"
   },
   {
-    "id": "falta-resp-64",
+    "id": "falta-resp-63",
     "carimbo": "25/10/2026 18:10:05",
     "servicoDia": "25OUT26 ( DOMINGO - 08:00 até ao Término )",
     "posto": "MAJ PM",
@@ -1600,7 +1575,7 @@
     "informante": "MAJ PM Lima e Silva (RG: 71821)"
   },
   {
-    "id": "falta-resp-65",
+    "id": "falta-resp-64",
     "carimbo": "24/10/2026 15:26:58",
     "servicoDia": "24OUT26 ( SÁBADO - 08:00 até ás 20:00 )",
     "posto": "MAJ PM",
@@ -1625,7 +1600,7 @@
     "informante": "MAJ PM Jader (RG: 82535)"
   },
   {
-    "id": "falta-resp-66",
+    "id": "falta-resp-65",
     "carimbo": "24/10/2026 20:05:20",
     "servicoDia": "24OUT26 ( SÁBADO - 08:00 até ás 20:00 )",
     "posto": "MAJ PM",
