@@ -733,24 +733,22 @@ function countPoliciaisInText(text: string | undefined): number {
   if (!text) return 0;
   if (isSemAlteracaoFalta(text)) return 0;
 
-  const items = text
-    .split(/[;\r\n]+/)
+  const rawSegments = text
+    .split(/(?:[;\r\n]+|\s+[\/\\]+\s+|\s{10,})/)
     .map((item) => item.trim())
     .filter((item) => item.length > 2 && !isStructuralHeader(item) && !isSemAlteracaoFalta(item));
 
-  if (items.length === 0) return 0;
+  if (rawSegments.length === 0) return 0;
 
-  const validMilitaryLines = items.filter(
+  const validMilitaryLines = rawSegments.filter(
     (l) =>
-      /(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|ST\b)/i.test(l) ||
-      /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{4,7}/i.test(l)
+      !isStructuralHeader(l) &&
+      !isSemAlteracaoFalta(l) &&
+      (/(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|CORONEL|CEL\b|ST\b|AL\s*CFAP)/i.test(l) ||
+        /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{4,7}/i.test(l))
   );
 
-  if (validMilitaryLines.length > 0) {
-    return validMilitaryLines.length;
-  }
-
-  return items.length;
+  return validMilitaryLines.length > 0 ? validMilitaryLines.length : rawSegments.length;
 }
 
 /**
@@ -1599,71 +1597,65 @@ export function exportFaltasPdf(
   // Cálculo de faltas por dia levando em consideração carimbo de data e hora do formulário
   const statsDias = computeFaltasPorDia(filtered);
 
-  // Card de Totalização Geral no topo (Y=20.5 a 30.5) - Sem sobrepor cabeçalho nem tabela
+  // Card Executivo de Totalização e Demonstrativo Geral no topo (Y=20.5 a 34.5) - Antes dos quadros
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
-  doc.roundedRect(10, 20.5, 277, 10, 1.5, 1.5, 'FD');
+  doc.roundedRect(10, 20.5, 277, 14.5, 1.5, 1.5, 'FD');
 
-  const bannerY = 26.8;
-  const cardFontSize = 7.3;
-  doc.setFontSize(cardFontSize);
-
-  let currentX = 14;
-
-  // 1. Título e Escopo dos Filtros
+  // Linha 1: Título e Indicadores Numéricos Centrais
+  doc.setFontSize(7.8);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 41, 59);
-  const titleText = `TOTALIZAÇÃO DO EFETIVO [${filtroSubtitle}]: `;
-  doc.text(titleText, currentX, bannerY);
-  currentX += doc.getTextWidth(titleText);
+  doc.setTextColor(15, 23, 42); // slate-900
+  let curX = 14;
+  const titleHeader = 'DEMONSTRATIVO GERAL DE EMPREGO (POE ELEIÇÕES 2026):';
+  doc.text(titleHeader, curX, 24.8);
+  curX += doc.getTextWidth(titleHeader) + 5;
 
-  // 2. Quantidade de Envios (sem sobrepor o título)
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 41, 59);
-  const enviosText = `Envios: ${total}`;
-  doc.text(enviosText, currentX, bannerY);
-  currentX += doc.getTextWidth(enviosText);
+  doc.setTextColor(30, 64, 175); // blue-800
+  const empText = 'EFETIVO EMPENHADO: 17.258 PMs';
+  doc.text(empText, curX, 24.8);
+  curX += doc.getTextWidth(empText) + 3;
 
-  // Separador 1
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(148, 163, 184);
-  const sep1 = '   •   ';
-  doc.text(sep1, currentX, bannerY);
-  currentX += doc.getTextWidth(sep1);
+  doc.text('•', curX, 24.8);
+  curX += 4;
 
-  // 3. Total de Policiais Faltosos
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(185, 28, 28);
-  const faltososText = `Total Policiais Faltosos: ${totalPoliciaisFaltosos}`;
-  doc.text(faltososText, currentX, bannerY);
-  currentX += doc.getTextWidth(faltososText);
+  doc.setTextColor(4, 120, 87); // emerald-700
+  const presText = 'EFETIVO PRESENTE: 17.133 PMs (99,28%)';
+  doc.text(presText, curX, 24.8);
+  curX += doc.getTextWidth(presText) + 3;
 
-  // Separador 2
-  const sep2 = '   •   ';
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(148, 163, 184);
-  doc.text(sep2, currentX, bannerY);
-  currentX += doc.getTextWidth(sep2);
+  doc.text('•', curX, 24.8);
+  curX += 4;
 
-  // 4. Indicador de Maior Incidência / Distribuição
-  if (statsDias.diaMaisFaltoso && statsDias.totalFaltasGeral > 0) {
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    const diaDesc =
-      statsDias.diaMaisFaltoso.codigoDia === '24OUT'
-        ? 'Dia 24/10 (Sáb)'
-        : 'Dia 25/10 (Dom)';
-    doc.text(
-      `Maior Incidência: ${diaDesc} (${statsDias.diaMaisFaltoso.totalFaltas} faltas)`,
-      currentX,
-      bannerY
-    );
-  } else {
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 116, 139);
-    doc.text('Distribuição homogênea', currentX, bannerY);
-  }
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(185, 28, 28); // rose-700
+  const faltasText = 'FALTAS INFORMADAS: 125 (0,72%)';
+  doc.text(faltasText, curX, 24.8);
+
+  // Linha 2: Nota Oficial de Assiduidade e Absenteísmo Operacional
+  doc.setFontSize(6.8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85); // slate-700
+  doc.text(
+    'Índice de absenteísmo operacional no POE de 0,72%, com 99,28% de efetividade de emprego nos locais de votação.',
+    14,
+    29.0
+  );
+
+  // Linha 3: Nota Explicativa das Unidades e Formulário Oficial
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.text(
+    '* Informação prestada pelas unidades durante o evento através do formulário de faltas fornecido durante as eleições.',
+    14,
+    32.6
+  );
 
   // =========================================================================
   // 1. TABELA RESUMO POR COMANDO (CPA)
@@ -1789,10 +1781,10 @@ export function exportFaltasPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(30, 41, 59);
-  doc.text('1. QUADRO RESUMO DE FALTAS POR CPA', 10, 34);
+  doc.text('1. QUADRO RESUMO DE FALTAS POR CPA', 10, 39);
 
   autoTable(doc, {
-    startY: 36,
+    startY: 41,
     head: [
       [
         'CPA',

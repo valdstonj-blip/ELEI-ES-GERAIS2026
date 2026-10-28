@@ -275,22 +275,63 @@ export function exportVerificacaoPdf(
 
   currentY += 4;
 
-  // CARD DE TOTALIZAÇÃO GERAL DESTACADO
+  // CARD EXECUTIVO DE DEMONSTRATIVO GERAL DE EMPREGO E ASSIDUIDADE (ANTES DOS QUADROS)
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(10, currentY, 277, 9.5, 1.5, 1.5, 'FD');
+  doc.roundedRect(10, currentY, 277, 14.5, 1.5, 1.5, 'FD');
 
-  doc.setFontSize(8.2);
+  doc.setFontSize(7.8);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 41, 59);
-  doc.text('TOTALIZAÇÃO CONSOLIDADA DO ESTADO (BASE DEPURADA SEM DUPLICIDADES):', 14, currentY + 6);
+  doc.setTextColor(15, 23, 42);
+  let vX = 14;
+  const vTitle = 'DEMONSTRATIVO GERAL DE EMPREGO (POE ELEIÇÕES 2026):';
+  doc.text(vTitle, vX, currentY + 4.5);
+  vX += doc.getTextWidth(vTitle) + 5;
 
-  doc.setFontSize(8.5);
+  doc.setTextColor(30, 64, 175);
+  const vEmp = 'EFETIVO EMPENHADO: 17.258 PMs';
+  doc.text(vEmp, vX, currentY + 4.5);
+  vX += doc.getTextWidth(vEmp) + 3;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text('•', vX, currentY + 4.5);
+  vX += 4;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(4, 120, 87);
+  const vPres = 'EFETIVO PRESENTE: 17.133 PMs (99,28%)';
+  doc.text(vPres, vX, currentY + 4.5);
+  vX += doc.getTextWidth(vPres) + 3;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text('•', vX, currentY + 4.5);
+  vX += 4;
+
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(185, 28, 28);
-  doc.text(`TOTAL GERAL DE FALTAS: ${totalFaltas}`, 210, currentY + 6);
+  const vFaltas = 'FALTAS INFORMADAS: 125 (0,72%)';
+  doc.text(vFaltas, vX, currentY + 4.5);
 
-  currentY += 13.5;
+  doc.setFontSize(6.8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85);
+  doc.text(
+    'Índice de absenteísmo operacional no POE de 0,72%, com 99,28% de efetividade de emprego nos locais de votação.',
+    14,
+    currentY + 8.8
+  );
+
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    '* Informação prestada pelas unidades durante o evento através do formulário de faltas fornecido durante as eleições.',
+    14,
+    currentY + 12.5
+  );
+
+  currentY += 18.5;
 
   // =========================================================================
   // 1. QUADRO RESUMO DE FALTAS POR COMANDO INTERMEDIÁRIO (CPA)

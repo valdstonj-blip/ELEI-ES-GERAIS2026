@@ -93,30 +93,28 @@ function isStructuralHeader(line: string): boolean {
   return false;
 }
 
-// Função utilitária precisa para contar policiais em texto com delimitadores (ex: ponto e vírgula)
+// Função utilitária precisa para contar policiais em texto com delimitadores (ex: ponto e vírgula, quebra de linha, barras " / " ou espaços múltiplos)
 export function countPoliciaisInText(text: string | undefined | null): number {
   if (!text) return 0;
   if (isSemAlteracaoFalta(text)) return 0;
 
-  // Divide por quebra de linha ou ponto e vírgula para identificar cada militar faltoso
-  const items = text
-    .split(/[;\r\n]+/)
+  // Divide por delimitadores: ponto e vírgula, quebra de linha, barra com espaços " / " ou grandes blocos de espaço (>=10)
+  const rawSegments = text
+    .split(/(?:[;\r\n]+|\s+[\/\\]+\s+|\s{10,})/)
     .map((s) => s.trim())
     .filter((s) => Boolean(s) && !isStructuralHeader(s) && !isSemAlteracaoFalta(s));
 
-  if (items.length === 0) return 0;
+  if (rawSegments.length === 0) return 0;
 
-  const validMilitaryItems = items.filter(
+  const validMilitaryItems = rawSegments.filter(
     (l) =>
-      /(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|ST\b)/i.test(l) ||
-      /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{4,7}/i.test(l)
+      !isStructuralHeader(l) &&
+      !isSemAlteracaoFalta(l) &&
+      (/(SARGENTO|SGT|CABO|CB\b|SOLDADO|SD\b|SUBTEN|SUB\s*TEN|TENENTE|TEN\b|CAPITÃO|CAP\b|MAJOR|MAJ\b|CORONEL|CEL\b|ST\b|AL\s*CFAP)/i.test(l) ||
+        /(?:RG\s*[:\-\s]*\s*|\b)[0-9]{2,3}\.[0-9]{3}|[0-9]{4,7}/i.test(l))
   );
 
-  if (validMilitaryItems.length > 0) {
-    return validMilitaryItems.length;
-  }
-
-  return items.length;
+  return validMilitaryItems.length > 0 ? validMilitaryItems.length : rawSegments.length;
 }
 
 // Formata todos os campos da ficha de faltas para cópia limpa e profissional
@@ -164,6 +162,7 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCpa, setSelectedCpa] = useState('TODOS');
   const [selectedOpm, setSelectedOpm] = useState('TODAS');
+  const [viewFaltasMode, setViewFaltasMode] = useState<'AMBOS' | 'CPA' | 'OPM'>('AMBOS');
   // Filtro estrito de dias pelo Carimbo de Data/Hora (2º Turno Oficial: 24OUT e 25OUT)
   // 'TODOS' agora corresponde exclusivamente a todos os dias do 2º Turno (24 e 25 de Outubro)
   const [selectedDay, setSelectedDay] = useState<'TODOS' | '24OUT' | '25OUT'>('TODOS');
@@ -299,6 +298,59 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
     };
   }, [cpaFaltasStats]);
 
+  // Consolidação detalhada de Faltas por OPM (Batalhões e Unidades)
+  const opmFaltasStats = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        opm: string;
+        cpa: string;
+        totalFaltas: number;
+        totalEnvios: number;
+      }
+    > = {};
+
+    faltas.forEach((f) => {
+      const cpaName = normalizeCpaName(f.comandoIntermediario || f.cpa || '');
+      const opmName = (f.opm || f.uopDestino || f.opmOrigem || 'Não informada').trim();
+      if (!opmName) return;
+
+      if (selectedDay !== 'TODOS') {
+        const fallbackText = `${f.servicoDia || ''} ${f.turno || ''} ${f.data || ''}`;
+        if (!matchesCarimboDate(f.carimbo, selectedDay, fallbackText)) {
+          return;
+        }
+      }
+
+      if (selectedCpa !== 'TODOS' && cpaName !== selectedCpa) {
+        return;
+      }
+
+      if (!map[opmName]) {
+        map[opmName] = {
+          opm: opmName,
+          cpa: cpaName,
+          totalFaltas: 0,
+          totalEnvios: 0,
+        };
+      }
+
+      const qtd = countPoliciaisInText(f.faltasPoe || f.motivo);
+      map[opmName].totalEnvios += 1;
+      map[opmName].totalFaltas += qtd;
+      if (cpaName && (!map[opmName].cpa || map[opmName].cpa === '1º CPA')) {
+        map[opmName].cpa = cpaName;
+      }
+    });
+
+    return Object.values(map)
+      .filter((item) => item.totalFaltas > 0 || (selectedCpa !== 'TODOS' && item.totalEnvios > 0))
+      .sort((a, b) => {
+        if (b.totalFaltas !== a.totalFaltas) return b.totalFaltas - a.totalFaltas;
+        return a.opm.localeCompare(b.opm, 'pt-BR', { numeric: true });
+      });
+  }, [faltas, selectedDay, selectedCpa]);
+
   const availableCpas = useMemo(() => {
     const set = new Set(
       faltas
@@ -407,9 +459,9 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
     }
 
     const items = text
-      .split(/[;\r\n]+/)
+      .split(/(?:[;\r\n]+|\s+[\/\\]+\s+|\s{10,})/)
       .map((s) => s.trim())
-      .filter((s) => s.length > 2 && !isSemAlteracaoFalta(s));
+      .filter((s) => s.length > 2 && !isStructuralHeader(s) && !isSemAlteracaoFalta(s));
 
     if (items.length === 0) {
       return (
@@ -529,6 +581,92 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
         </div>
       </div>
 
+      {/* DEMONSTRATIVO GERAL DE EMPREGO OPERACIONAL E ASSIDUIDADE (POE ELEIÇÕES 2026) - ANTES DOS QUADROS */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-sm space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-400/30 flex items-center justify-center shrink-0">
+              <Users className="w-4 h-4 text-blue-300" />
+            </div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-white">
+                Demonstrativo Geral de Emprego e Assiduidade Operacional (POE Eleições 2026)
+              </span>
+              <p className="text-[11px] text-slate-300 font-medium">
+                Informação prestada pelas unidades durante o evento através do formulário de faltas fornecido durante as eleições.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-200 border border-blue-400/30 whitespace-nowrap self-start md:self-auto font-mono">
+            Efetivo Oficial POE
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {/* Card 1: Efetivo Empenhado */}
+          <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
+              Efetivo Empenhado
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-white font-mono">17.258</span>
+              <span className="text-[10px] text-slate-400 font-semibold">PMs</span>
+            </div>
+            <span className="text-[10px] text-blue-300 font-medium block mt-0.5">
+              Serviço extraordinário
+            </span>
+          </div>
+
+          {/* Card 2: Efetivo Presente */}
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">
+              Efetivo Presente
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-emerald-400 font-mono">17.133</span>
+              <span className="text-[10px] text-emerald-300 font-semibold">PMs</span>
+            </div>
+            <span className="text-[10px] text-emerald-300 font-bold block mt-0.5">
+              99,28% de presença
+            </span>
+          </div>
+
+          {/* Card 3: Faltas Informadas */}
+          <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-rose-300 uppercase tracking-wider block">
+              Faltas Informadas
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-rose-400 font-mono">125</span>
+              <span className="text-[10px] text-rose-300 font-semibold">faltas</span>
+            </div>
+            <span className="text-[10px] text-rose-300 font-bold block mt-0.5">
+              0,72% de absenteísmo
+            </span>
+          </div>
+
+          {/* Card 4: Eficácia de Emprego */}
+          <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
+              Eficácia de Emprego
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-white font-mono">99,28%</span>
+            </div>
+            <span className="text-[10px] text-slate-300 font-medium block mt-0.5">
+              Prontidão da tropa
+            </span>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-300 bg-white/5 rounded-lg px-3 py-2 border border-white/5 flex items-start sm:items-center gap-2">
+          <span className="text-blue-400 font-bold shrink-0">•</span>
+          <span>
+            Índice de absenteísmo operacional no POE de <strong className="text-rose-300">0,72%</strong>, com <strong className="text-emerald-300">99,28%</strong> de efetividade de emprego nos locais de votação. Informação prestada pelas unidades durante o evento através do formulário de faltas fornecido durante as eleições.
+          </span>
+        </div>
+      </div>
+
       {/* QUADRO RESUMO DE FALTAS POR DATA DO EVENTO (SIMPLES E FUNCIONAL) */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2">
         <div className="flex items-center justify-between">
@@ -638,81 +776,251 @@ export const FaltasTab: React.FC<FaltasTabProps> = ({
         </div>
       </div>
 
-      {/* QUADRO RÁPIDO DE COMANDOS INTERMEDIÁRIOS (CPA) */}
-      <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      {/* QUADRO CONSOLIDADO: QUANTIDADE DE FALTAS POR CPA E POR OPM (SIMPLES, CLARO E DIRETO) */}
+      <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
             <Shield className="w-4 h-4 text-blue-700" />
-            <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
-              Comandos Intermediários (CPA)
+            <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              Quadro de Faltas: Por Comando (CPA) e por Unidade (OPM)
             </span>
-            {selectedCpa !== 'TODOS' && (
-              <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 text-rose-900 font-bold border border-rose-200">
-                Filtro: {selectedCpa}
+            {(selectedCpa !== 'TODOS' || selectedOpm !== 'TODAS') && (
+              <span className="px-2 py-0.5 rounded text-[11px] bg-rose-100 text-rose-900 font-bold border border-rose-200 flex items-center gap-1.5 shadow-2xs">
+                <span>Filtro Ativo:</span>
+                <span className="font-extrabold">{selectedOpm !== 'TODAS' ? selectedOpm : selectedCpa}</span>
               </span>
             )}
           </div>
-          {selectedCpa !== 'TODOS' && (
-            <button
-              onClick={() => {
-                setSelectedCpa('TODOS');
-                setSelectedOpm('TODAS');
-                setCurrentPage(1);
-              }}
-              className="text-xs text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer"
-            >
-              Limpar Filtro
-            </button>
-          )}
-        </div>
 
-        {/* Grade de Botões dos Comandos Intermediários */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-1.5 text-xs">
-          {cpaFaltasStats.map((item) => {
-            const isSelected = selectedCpa === item.comando;
-            const hasFaltas = item.totalFaltas > 0;
-
-            return (
+          <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+            {/* Seletor de Modo de Exibição: Ambos | Por CPA | Por OPM */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
               <button
-                key={item.comando}
+                onClick={() => setViewFaltasMode('AMBOS')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  viewFaltasMode === 'AMBOS'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Ambos
+              </button>
+              <button
+                onClick={() => setViewFaltasMode('CPA')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  viewFaltasMode === 'CPA'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Por CPA ({cpaFaltasStats.filter((c) => c.totalFaltas > 0).length})
+              </button>
+              <button
+                onClick={() => setViewFaltasMode('OPM')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  viewFaltasMode === 'OPM'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Por OPM ({opmFaltasStats.length})
+              </button>
+            </div>
+
+            {(selectedCpa !== 'TODOS' || selectedOpm !== 'TODAS') && (
+              <button
                 onClick={() => {
-                  setSelectedCpa(isSelected ? 'TODOS' : item.comando);
+                  setSelectedCpa('TODOS');
                   setSelectedOpm('TODAS');
                   setCurrentPage(1);
                 }}
-                className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                  isSelected
-                    ? 'bg-blue-600 text-white border-blue-700 shadow-xs ring-2 ring-blue-400'
-                    : hasFaltas
-                    ? 'bg-rose-50 hover:bg-rose-100/80 border-rose-300 text-rose-950 shadow-2xs'
-                    : 'bg-slate-50 hover:bg-blue-50/50 text-slate-800 border-slate-200'
-                }`}
+                className="text-xs text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer ml-1"
               >
-                <div className="flex items-center justify-between gap-1">
-                  <span className={`font-black text-xs truncate ${isSelected ? 'text-white' : hasFaltas ? 'text-rose-950' : 'text-slate-900'}`}>
-                    {item.comando}
-                  </span>
-                  {hasFaltas && !isSelected && (
-                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse shrink-0" />
-                  )}
-                </div>
-
-                <div className="mt-1 flex items-baseline justify-between">
-                  <span className={`text-base font-black font-mono ${
-                    isSelected ? 'text-white' : hasFaltas ? 'text-rose-700 font-black' : 'text-slate-500 font-bold'
-                  }`}>
-                    {item.totalFaltas}
-                  </span>
-                  <span className={`text-[10px] font-semibold ${
-                    isSelected ? 'text-blue-100' : hasFaltas ? 'text-rose-700 font-bold' : 'text-slate-400'
-                  }`}>
-                    {item.totalFaltas === 1 ? 'falta' : 'faltas'}
-                  </span>
-                </div>
+                Limpar Filtro
               </button>
-            );
-          })}
+            )}
+          </div>
         </div>
+
+        {/* 1. SEÇÃO POR COMANDO INTERMEDIÁRIO (CPA) */}
+        {(viewFaltasMode === 'AMBOS' || viewFaltasMode === 'CPA') && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-0.5">
+              <span className="flex items-center gap-1 font-bold text-slate-700">
+                <span>Comandos Intermediários (CPA):</span>
+                <span className="text-slate-400 font-normal hidden sm:inline">
+                  (Clique no comando para filtrar a tabela)
+                </span>
+              </span>
+              <span className="font-mono text-[11px] text-slate-600">
+                Total:{' '}
+                <strong className="text-rose-700 font-extrabold">{cpaTotals.faltasTot} faltas</strong>{' '}
+                em {cpaTotals.enviosTot} envios
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-1.5 text-xs">
+              {cpaFaltasStats.map((item) => {
+                const isSelected = selectedCpa === item.comando;
+                const hasFaltas = item.totalFaltas > 0;
+
+                return (
+                  <button
+                    key={item.comando}
+                    onClick={() => {
+                      const newCpa = isSelected ? 'TODOS' : item.comando;
+                      setSelectedCpa(newCpa);
+                      setSelectedOpm('TODAS');
+                      setCurrentPage(1);
+                    }}
+                    title={`${item.comando}: ${item.totalFaltas} falta(s) em ${item.totalEnvios} envio(s)`}
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-blue-600 text-white border-blue-700 shadow-xs ring-2 ring-blue-400'
+                        : hasFaltas
+                        ? 'bg-rose-50 hover:bg-rose-100/80 border-rose-300 text-rose-950 shadow-2xs'
+                        : 'bg-slate-50 hover:bg-blue-50/50 text-slate-800 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span
+                        className={`font-black text-xs truncate ${
+                          isSelected ? 'text-white' : hasFaltas ? 'text-rose-950' : 'text-slate-900'
+                        }`}
+                      >
+                        {item.comando}
+                      </span>
+                      {hasFaltas && !isSelected && (
+                        <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse shrink-0" />
+                      )}
+                    </div>
+
+                    <div className="mt-1 flex items-baseline justify-between">
+                      <span
+                        className={`text-base font-black font-mono ${
+                          isSelected
+                            ? 'text-white'
+                            : hasFaltas
+                            ? 'text-rose-700 font-black'
+                            : 'text-slate-500 font-bold'
+                        }`}
+                      >
+                        {item.totalFaltas}
+                      </span>
+                      <span
+                        className={`text-[10px] font-semibold ${
+                          isSelected ? 'text-blue-100' : hasFaltas ? 'text-rose-700 font-bold' : 'text-slate-400'
+                        }`}
+                      >
+                        {item.totalFaltas === 1 ? 'falta' : 'faltas'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 2. SEÇÃO POR UNIDADE OPERACIONAL (OPM) */}
+        {(viewFaltasMode === 'AMBOS' || viewFaltasMode === 'OPM') && (
+          <div className="space-y-1.5 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-0.5">
+              <span className="flex items-center gap-1 font-bold text-slate-700">
+                <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Quantidade de Faltas por OPM:</span>
+                <span className="text-slate-400 font-normal hidden sm:inline">
+                  {selectedCpa !== 'TODOS'
+                    ? `(Exibindo apenas OPMs do ${selectedCpa})`
+                    : '(Ordenado da maior para menor quantidade)'}
+                </span>
+              </span>
+              <span className="font-mono text-[11px] text-slate-600">
+                <strong className="text-indigo-900 font-bold">{opmFaltasStats.length} OPM(s)</strong> listada(s)
+              </span>
+            </div>
+
+            {opmFaltasStats.length === 0 ? (
+              <div className="py-4 text-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-slate-200">
+                Nenhuma falta registrada para as OPMs no filtro selecionado.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-1.5 text-xs">
+                {opmFaltasStats.map((item) => {
+                  const isSelected = selectedOpm.toLowerCase() === item.opm.toLowerCase();
+                  const is2Bpm = item.opm.includes('2º BPM') || item.opm.includes('2° BPM');
+
+                  return (
+                    <button
+                      key={item.opm}
+                      onClick={() => {
+                        const newOpm = isSelected ? 'TODAS' : item.opm;
+                        setSelectedOpm(newOpm);
+                        setCurrentPage(1);
+                      }}
+                      title={`${item.opm} (${item.cpa}): ${item.totalFaltas} falta(s) em ${item.totalEnvios} envio(s)`}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-indigo-700 text-white border-indigo-800 shadow-xs ring-2 ring-indigo-400'
+                          : is2Bpm
+                          ? 'bg-amber-50 hover:bg-amber-100/90 border-amber-300 text-amber-950 shadow-2xs ring-1 ring-amber-400/50'
+                          : item.totalFaltas >= 5
+                          ? 'bg-rose-50 hover:bg-rose-100/80 border-rose-300 text-rose-950 shadow-2xs'
+                          : 'bg-slate-50 hover:bg-indigo-50/50 text-slate-800 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={`font-black text-xs truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                          {item.opm}
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold px-1 rounded ${
+                            isSelected
+                              ? 'bg-indigo-800 text-indigo-100'
+                              : is2Bpm
+                              ? 'bg-amber-200 text-amber-900'
+                              : 'bg-slate-200/70 text-slate-600'
+                          }`}
+                        >
+                          {item.cpa}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 flex items-baseline justify-between">
+                        <span
+                          className={`text-base font-black font-mono ${
+                            isSelected
+                              ? 'text-white'
+                              : is2Bpm
+                              ? 'text-amber-800 font-black'
+                              : item.totalFaltas >= 5
+                              ? 'text-rose-700 font-black'
+                              : 'text-slate-800'
+                          }`}
+                        >
+                          {item.totalFaltas}
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold ${
+                            isSelected
+                              ? 'text-indigo-100'
+                              : is2Bpm
+                              ? 'text-amber-800 font-bold'
+                              : item.totalFaltas >= 5
+                              ? 'text-rose-700 font-bold'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {item.totalFaltas === 1 ? 'falta' : 'faltas'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 2. BARRA DE FERRAMENTAS: BUSCA, FILTROS DE DIA (03OUT / 04OUT), CPA, OPM E PDF */}

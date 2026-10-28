@@ -583,6 +583,88 @@ export const VerificacaoTab: React.FC<VerificacaoTabProps> = ({
         </div>
       </div>
 
+      {/* DEMONSTRATIVO GERAL DE EMPREGO OPERACIONAL E ASSIDUIDADE (POE ELEIÇÕES 2026) - ANTES DOS QUADROS */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 text-white rounded-xl p-4 shadow-sm space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-400/30 flex items-center justify-center shrink-0">
+              <Users className="w-4 h-4 text-blue-300" />
+            </div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-white">
+                Demonstrativo Geral de Emprego e Assiduidade Operacional (POE Eleições 2026)
+              </span>
+              <p className="text-[11px] text-slate-300 font-medium">
+                Informação prestada pelas unidades durante o evento através do formulário de faltas fornecido durante as eleições.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-200 border border-blue-400/30 whitespace-nowrap self-start md:self-auto font-mono">
+            Efetivo Oficial POE
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
+              Efetivo Empenhado
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-white font-mono">17.258</span>
+              <span className="text-[10px] text-slate-400 font-semibold">PMs</span>
+            </div>
+            <span className="text-[10px] text-blue-300 font-medium block mt-0.5">
+              Serviço extraordinário
+            </span>
+          </div>
+
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">
+              Efetivo Presente
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-emerald-400 font-mono">17.133</span>
+              <span className="text-[10px] text-emerald-300 font-semibold">PMs</span>
+            </div>
+            <span className="text-[10px] text-emerald-300 font-bold block mt-0.5">
+              99,28% de presença
+            </span>
+          </div>
+
+          <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-rose-300 uppercase tracking-wider block">
+              Faltas Informadas
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-rose-400 font-mono">125</span>
+              <span className="text-[10px] text-rose-300 font-semibold">faltas</span>
+            </div>
+            <span className="text-[10px] text-rose-300 font-bold block mt-0.5">
+              0,72% de absenteísmo
+            </span>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
+              Eficácia de Emprego
+            </span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-black text-white font-mono">99,28%</span>
+            </div>
+            <span className="text-[10px] text-slate-300 font-medium block mt-0.5">
+              Prontidão da tropa
+            </span>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-300 bg-white/5 rounded-lg px-3 py-2 border border-white/5 flex items-start sm:items-center gap-2">
+          <span className="text-blue-400 font-bold shrink-0">•</span>
+          <span>
+            Índice de absenteísmo operacional no POE de <strong className="text-rose-300">0,72%</strong>, com <strong className="text-emerald-300">99,28%</strong> de efetividade de emprego nos locais de votação. Informação prestada pelas unidades durante o evento através do formulário de faltas fornecido durante as eleições.
+          </span>
+        </div>
+      </div>
+
       {/* 2. BARRA DE FERRAMENTAS: FILTROS E BUSCA */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2.5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">

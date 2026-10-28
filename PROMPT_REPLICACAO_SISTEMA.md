@@ -102,8 +102,10 @@ Todas as conexões utilizam o formato CSV público exportado pelo Google Sheets:
    - **Nota Metodológica Obrigatória:** Todo relatório e card de ocorrências exibe a nota explicativa de que os números referem-se a ocorrências/registros, constando os indivíduos na dinâmica.
 3. **Planilha 3: Faltas de Efetivo no POE (Respostas do Google Forms)**
    - Heurística inteligente que identifica nomes, patentes militares (SD, CB, SGT, SUBTEN, TEN, CAP, MAJ, CEL) e RGs.
+   - Suporte a múltiplos militares na mesma resposta separados por quebra de linha, ponto e vírgula ou barras (ex: `2º SGT PM RG 87.096 DAS NEVES - 2º BPM / CB PM RG 104.996 DEBAQUER - 2º BPM` computa exatamente 2 faltas).
    - Ignora automaticamente envios sem faltas (*"Sem alteração"*, *"Zero"*, *"OK"*).
    - Ficha de Envio com botão de cópia formatada para despacho militar/WhatsApp.
+   - Visão simplificada com quantidade de faltas por CPA e por OPM.
 4. **Planilha 4: Controle de Acesso (Kill-Switch)**
    - Lê a célula A2 para autorizar ou suspender o acesso em massa dos visitantes.
    - Tolerância do parser a arquivos curtos (`CONTROLE\r\nLIBERADO` tem 18 caracteres).
